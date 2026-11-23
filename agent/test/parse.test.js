@@ -77,3 +77,17 @@ test("parses settings commands", () => {
     assert.equal(p(bad).kind, "settings_help", bad);
   }
 });
+
+test("parses recurring bills", () => {
+  const tokens = [{ symbol: "QOR" }, { symbol: "fUSD" }];
+  assert.deepEqual(parseCommand("pay 0.5 QOR to electricity every month on the 1st", tokens), {
+    kind: "schedule", amount: "0.5", token: "QOR", billerQuery: "electricity", every: "month on the 1st",
+  });
+  assert.deepEqual(parseCommand("pay 2 water every 10 minutes", tokens), { kind: "schedule", amount: "2", token: null, billerQuery: "water", every: "10 minutes" });
+  assert.equal(parseCommand("pay 2 water ref X every week", tokens).kind, "pay_help");
+  assert.equal(parseCommand("pay every week", tokens).kind, "pay_help");
+  assert.deepEqual(parseCommand("schedules", tokens), { kind: "schedules" });
+  assert.deepEqual(parseCommand("stop 3", tokens), { kind: "stop_schedule", id: 3 });
+  assert.deepEqual(parseCommand("/stop schedule #12", tokens), { kind: "stop_schedule", id: 12 });
+  assert.deepEqual(parseCommand("cancel", tokens), { kind: "cancel" });
+});

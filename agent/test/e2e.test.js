@@ -30,7 +30,7 @@ const owner = privateKeyToAccount(OWNER_KEY);
 // Stand-in for bech32: the tests only need a reversible, distinct spelling.
 const addresses = { toEvm: (v) => (v.startsWith("qor1") ? `0x${v.slice(4)}` : v), toBech32: (h) => `qor1${h.slice(2).toLowerCase()}` };
 
-let node, server, agent, chain, pub, token, notices = [];
+let node, server, agent, agentState, chain, pub, token, notices = [];
 
 async function waitForNode() {
   for (let i = 0; i < 100; i++) {
@@ -79,7 +79,7 @@ before(async () => {
     cosmosChainId: "qorechain-diana",
     publicUrl: "https://bills.example",
     addresses,
-    state: memoryState(),
+    state: (agentState = memoryState()),
     notify: async (text) => notices.push(text),
     log: { warn() {}, error() {} },
   });
@@ -205,6 +205,43 @@ test("asks for a post-quantum approval above the auto-pay limit, then pays", asy
   assert.match(notices.at(-1), /^Approved and paid: 60 fUSD to Water board \(ref NOV-RENT\)\./);
   assert.equal((await sign(id)).status, 409);
   assert.match((await agent.handle("history")).text, /60 fUSD to Water board \(approved by you\)/);
+});
+
+test("pays recurring bills when they are due", async () => {
+  assert.match((await agent.handle("schedules")).text, /No recurring bills/);
+  assert.match((await agent.handle("pay 5 fUSD to water every 2 minutes")).text, /shortest schedule is every 5 minutes/);
+  assert.match((await agent.handle("pay 101 fUSD to water every week")).text, /most I can pay at once/);
+  assert.match((await agent.handle("pay 5 fUSD to dstv every day")).text, /not on your allowlist/);
+
+  const small = (await agent.handle("pay 5 fUSD to water board every 10 minutes")).text;
+  assert.match(small, /^Recurring bill #1: 5 fUSD to Water board, every 10 minutes\.\nFirst payment: /);
+  assert.match(small, /I pay it myself/);
+  const big = (await agent.handle("pay 25 fUSD to ibedc every month on the 1st at 07:30")).text;
+  assert.match(big, /^Recurring bill #2: 25 fUSD to IBEDC electricity, every month on the 1st at 07:30 UTC\./);
+  assert.match(big, /send you an approval link/);
+  assert.match((await agent.handle("schedules")).text, /#1 5 fUSD to Water board, every 10 minutes — next .*\n#2 25 fUSD/);
+
+  assert.deepEqual(await agent.runDueSchedules(), []); // nothing is due yet
+  // Pretend both are due.
+  const due = (s) => ({ ...s, nextRun: Date.now() - 1000 });
+  agentState.set({ schedules: agentState.get().schedules.map(due) });
+  const [paid, approval] = await agent.runDueSchedules();
+  assert.match(paid.text, /^Recurring bill #1 \(every 10 minutes\):\nPaid 5 fUSD to Water board \(ref auto-1-\d{12}\)\.\ntx 0x/);
+  assert.match(approval.text, /^Recurring bill #2 .*\n25 fUSD to IBEDC electricity is above your auto-pay limit/);
+  assert.match(approval.link.url, /\/approve\/[0-9a-f]{32}$/);
+  assert.ok(agentState.get().schedules.every((s) => s.nextRun > Date.now()));
+  assert.deepEqual(await agent.runDueSchedules(), []); // each occurrence runs once
+
+  // The same occurrence is never paid twice, even if the schedule state were rolled back.
+  const lastRun = agentState.get().schedules[0].lastRun;
+  agentState.set({ schedules: agentState.get().schedules.map((s) => (s.id === 1 ? { ...s, nextRun: lastRun } : s)) });
+  assert.match((await agent.runDueSchedules())[0].text, /already paid/);
+
+  assert.match((await agent.handle("stop 2")).text, /^Stopped recurring bill #2/);
+  assert.match((await agent.handle("stop schedule 1")).text, /^Stopped recurring bill #1/);
+  assert.match((await agent.handle("stop 1")).text, /no recurring bill #1/);
+  assert.match((await agent.handle("schedules")).text, /No recurring bills/);
+  assert.match((await agent.handle("cancel")).text, /^Cancelled/); // the unsigned approval
 });
 
 test("changes settings only with the owner's signature", async () => {

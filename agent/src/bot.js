@@ -26,12 +26,34 @@ export function createBot({
   gasDispenser = null, // gas.js: top-ups bounded by QoreChain's native spending rules
   maxUsers = 50,
   maxSetupsPerUser = 3,
+  scheduleEveryMs = 30_000, // how often to look for recurring bills that are due
   log = console,
 }) {
   const requests = new Map();
   const sessions = new Map(); // telegramId -> { agent, keeper, qore }
   let lastAdminAsk = 0;
   let dispenserTimer = null;
+  let scheduleTimer = null;
+  let scheduling = false;
+
+  /** Pay every user's recurring bills that are due, and tell each user what happened. */
+  async function runSchedules() {
+    if (scheduling) return; // a slow round must not overlap the next one
+    scheduling = true;
+    try {
+      for (const [id, u] of Object.entries(users())) {
+        if (!u.account || !(u.schedules || []).some((s) => s.active && s.nextRun <= Date.now())) continue;
+        try {
+          const { agent } = await session(id);
+          for (const message of await agent.runDueSchedules()) await notifyUser(id, message).catch(() => {});
+        } catch (error) {
+          log.error?.(`[bot] recurring bills for user ${id} failed:`, error.message);
+        }
+      }
+    } finally {
+      scheduling = false;
+    }
+  }
 
   const users = () => store.get().users || {};
   const userState = (id) => ({
@@ -152,10 +174,14 @@ export function createBot({
       }
       // Resume every user that already has an account.
       for (const id of Object.keys(users())) if (users()[id].account) await session(id);
+      scheduleTimer = setInterval(runSchedules, scheduleEveryMs);
+      scheduleTimer.unref?.();
     },
+    runSchedules,
     stop() {
       mainKeeper.stop();
       clearInterval(dispenserTimer);
+      clearInterval(scheduleTimer);
       for (const pending of sessions.values()) pending.then((s) => s.keeper.stop(), () => {});
     },
     async handle(userId, text) {

@@ -57,7 +57,8 @@ const bot = createBot({
   gasDispenser,
   log,
   // Telegram private chats use the user's id as the chat id.
-  notifyUser: (userId, text) => telegram.send(userId, { text }),
+  // A message is plain text, or { text, link } (e.g. an approval link for a recurring bill).
+  notifyUser: (userId, message) => telegram.send(userId, typeof message === "string" ? { text: message } : message),
   notifyAdmin: (text) => (config.adminTelegramId ? telegram.send(config.adminTelegramId, { text }) : Promise.resolve()),
   agentOptions: {
     tokens: config.tokens,

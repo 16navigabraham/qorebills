@@ -63,7 +63,12 @@ When the daily rule is used up, new users are told to try again the next UTC day
 {
   "nextIndex": 3,
   "users": {
-    "<telegram user id>": { "index": 1, "account": "0x…", "owner": "0x…", "setups": 1 }
+    "<telegram user id>": {
+      "index": 1, "account": "0x…", "owner": "0x…", "setups": 1, "nextScheduleId": 2,
+      "schedules": [{ "id": 1, "amount": "0.5", "token": "QOR", "billerAddress": "0x…", "billerName": "Electricity (demo)",
+                      "every": { "unit": "month", "n": 1, "monthday": 1, "time": { "hour": 9, "minute": 0 } },
+                      "anchor": 1795442400000, "nextRun": 1796115600000, "active": true }]
+    }
   }
 }
 ```
@@ -94,6 +99,14 @@ Everything else is read from the chain when needed: limits, balances, billers, n
 2. The agent resolves the biller among the account's allowed billers and parses the amount in the token's decimals (refusing extra decimals). It then pre-checks token enabled, reference unused, max per payment, today's remaining cap and balance, so the user gets a clear answer without spending gas.
 3. Within the auto-pay limit: `pay(...)` from the user's key. Above it: a signature request (see below), then `payWithApproval(...)`.
 4. Every write is simulated first, so a refusal comes back as the contract's custom error and is explained in plain words.
+
+### Recurring bills
+
+1. `pay 0.5 QOR to electricity every month on the 1st` is parsed into an amount, token, biller and an `every` spec (`schedule.js`: minutes, hours, days, weeks or months; a weekday or day of month; a time, 09:00 UTC by default; at least every 5 minutes).
+2. The agent checks the biller is allowed, the token enabled and the amount within the max per payment, then saves the schedule with its first due time. At most 10 active schedules per user.
+3. Every 30 seconds the bot looks for users with a schedule that is due and calls that user's `runDueSchedules`. For each due schedule it first moves `nextRun` on and saves it, then runs the normal payment path with the reference `auto-<id>-<YYYYMMDDHHmm>` of that occurrence: within the auto-pay limit it pays; above it, the user gets an approval link. The result is sent to the user on Telegram.
+4. Because each occurrence has its own reference and the contract refuses a paid reference, an occurrence is paid at most once, even if the agent retried or its state were rolled back. After downtime, a missed occurrence is paid once and the schedule continues from the current time. A day of the month past the end of a month (the 31st) falls on its last day.
+5. A scheduled approval link replaces any other request waiting for the user's signature (one request per nonce).
 
 ### Signature requests (approvals and settings)
 
@@ -175,8 +188,9 @@ flowchart LR
 | `contracts/test/BillAgentAccount.test.js` | Setup, every limit, approvals (wrong details, replay, expiry, missing proof of possession, wrong key, hard caps, inactive precompile), every signed settings change, direct owner actions |
 | `contracts/test/BillAgentFactory.test.js` | Exact setup text, creation by any submitter, changed or reused or expired or foreign setups, the deployer guard, size limits |
 | `agent/test/parse.test.js` | Commands, biller matching, default references, wallet signature parsing |
+| `agent/test/schedule.test.js` | Parsing schedules, next due times (weekdays, month ends, intervals), occurrence references |
 | `agent/test/keeper.test.js` | Gas top-ups, registration, scoped windows, renewal |
-| `agent/test/e2e.test.js` | One user against a local Hardhat node: setup, payments, approvals, every settings command, request replacement, revoke |
+| `agent/test/e2e.test.js` | One user against a local Hardhat node: setup, payments, approvals, recurring bills (auto-paid, approval link, never twice, stop), every settings command, request replacement, revoke |
 | `agent/test/bot.e2e.test.js` | Two users: separate accounts and agent keys, separate payments, one user's wallet cannot approve the other's payment, user cap, restart |
 
 The PQC precompiles are replaced in tests by `MockQorePQC`, installed at `0x…0A01` and `0x…0A02` with `hardhat_setCode`; it accepts `keccak256(pubkey ‖ message)` as a signature. The real ML-DSA-87 path was checked separately on the testnet: an SDK-generated ML-DSA-87 signature over a QoreBills approval text in the `qorechain-msg-v1` format verifies with `pqcVerify`, and a changed message does not.

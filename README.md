@@ -65,7 +65,7 @@ QoreBills splits the job between three parties, so that no single one of them ca
 | Who | Does | Cannot |
 |---|---|---|
 | **You**, with your QoreX wallet | Choose billers and limits once, approve big payments, pause, revoke or withdraw at any time. Each of these is a message you sign with your **ML-DSA-87** (post-quantum) key. | (You are the owner.) |
-| **The AI agent**, on Telegram | Understands requests ("pay my light bill, 15 fUSD"), pays small bills on its own, asks for your signature when a bill is above your auto-pay limit, reports balances and history. | Pay anyone you haven't allowed, go over your limits, act after its permission expires, change any setting, or withdraw. |
+| **The AI agent**, on Telegram | Understands requests ("pay my light bill, 15 fUSD"), pays small bills on its own, pays recurring bills on schedule without being asked, asks for your signature when a bill is above your auto-pay limit, reports balances and history. | Pay anyone you haven't allowed, go over your limits, act after its permission expires, change any setting, or withdraw. |
 | **Your smart account** on QoreChain | Holds the money and checks every payment against your limits and your post-quantum signature, using QoreChain's PQC precompiles. | Be talked out of a rule: the rules are code. |
 
 The result for the user: **"pay my electricity" just happens, and nothing big happens without you.** Even if the agent's server were fully compromised, the worst an attacker could do is pay *your own* billers, within *your own* caps, until *your* expiry date, and you can stop it with one signature.
@@ -75,6 +75,7 @@ The result for the user: **"pay my electricity" just happens, and nothing big ha
 - **Chat-first:** everything happens in a Telegram chat. Billers can be named loosely ("pay 15 to ibedc"), and with a Gemini key the agent also understands free-form requests.
 - **One-signature onboarding:** a mobile setup page opens inside the QoreX app; you pick billers and limits and sign once. The agent pays the gas; you never need an EVM window or gas of your own.
 - **Auto-pay below your limit, approval above it:** small bills go through in seconds; bigger ones send you an "Approve in QoreX" button that shows exactly what you are signing.
+- **Recurring bills, paid on time:** "pay 0.5 QOR to electricity every month on the 1st" (or every week, every day at 08:00, every 10 minutes for a demo). The agent pays each one when it is due and tells you; one above your auto-pay limit sends you an approval link instead. Each occurrence has its own bill reference, so the contract pays it at most once.
 - **Never pay a bill twice:** each bill reference (by default biller + month) can be paid once.
 - **Full control from the chat:** `pause`, `resume`, `add biller`, `remove biller`, `limits`, `payments per day`, `renew`, `revoke`, `withdraw`, each as a post-quantum signed message.
 - **Readable signatures:** the signing page shows the exact text you sign in plain words ("amount: 60 fUSD"), and the contract rebuilds that same text before it accepts your signature.
@@ -82,12 +83,12 @@ The result for the user: **"pay my electricity" just happens, and nothing big ha
 
 ## Try it in 5 minutes
 
-You need the **QoreX** wallet (mobile app or browser extension) on **testnet**, with your post-quantum key registered in QoreX, and some test QOR from the QoreChain testnet faucet.
+You need the **QoreX** wallet (mobile app or browser extension) on **testnet**, with your post-quantum key registered in QoreX, and some test QOR from the [QoreChain testnet faucet](https://dashboard.qorechain.io/faucet).
 
 1. Open **[@QoreBills_bot](https://t.me/QoreBills_bot)** and send `/start`.
 2. Tap **Set up in QoreX**. The page opens in the QoreX browser with two **demo billers** already chosen (Electricity and Water; more in the list: Internet data, TV subscription, Hostel rent, School fees, or "Other address…" for your own). The demo billers are test addresses run by QoreBills, so test payments are not lost. The default limits work as they are (QOR: auto-pay 1, max 2 per bill, 5 a day; fUSD: 20, 100, 150; 5 payments a day; 30 days). Tap **Review and sign in QoreX**.
 3. The page shows the full setup text; sign it in QoreX. The bot replies with your new account address.
-4. From QoreX → Send, send the account some **QOR** to the `qor1…` address the bot gives you (send `fund` to see it again).
+4. From QoreX → Send, send the account some **QOR** to the `qor1…` address the bot gives you (send `fund` to see it again). No test QOR yet? The bot's message links the [faucet](https://dashboard.qorechain.io/faucet).
 5. In the chat, try:
 
 ```text
@@ -96,6 +97,8 @@ pay 0.5 QOR to electricity             → refused: that bill is already paid th
 pay 1.5 QOR to water ref RENT          → "Approve in QoreX": sign, and it is paid
 pay 50 QOR to electricity              → refused: above the most it can pay at once
 pay 1 QOR to netflix                   → refused: not on your allowlist
+pay 0.1 QOR to water every 10 minutes  → a recurring bill: paid on its own every 10 minutes
+schedules · stop 1                     → list recurring bills · stop one
 status · billers · history
 pause → sign in QoreX → status shows PAUSED → resume
 ```
@@ -141,6 +144,7 @@ The AI Agents track asks for *"an autonomous agent with spending and access limi
 | **Target limits** | Only owner-allowlisted billers can be paid | `_checkPayment` in [`BillAgentAccount.sol`](contracts/contracts/BillAgentAccount.sol) |
 | **Value limits** | Per token: auto-pay limit, hard cap per payment, cap per UTC day (approved payments included) | `TokenLimits`, `_checkPayment` |
 | **Transaction limits** | Maximum number of payments per UTC day | `maxPaymentsPerDay`, `paymentsOnDay` |
+| **Autonomy** | Recurring bills are paid by the agent when due, with no message from the owner, and stay inside every on-chain limit; one above the auto-pay limit still waits for the owner's ML-DSA-87 approval | [`schedule.js`](agent/src/schedule.js), `runDueSchedules` in [`agent.js`](agent/src/agent.js) |
 | **Duration limits** | The agent key stops working at `agentExpiry`; `pause` and `revoke` at any time | `agentExpiry`, `ActionKind.Pause`, `ActionKind.SetAgent` |
 | **Smart-account spending rules** | Two layers. The bill money sits in a per-user smart account whose rules only the owner sets. The agent's own gas treasury uses QoreChain's **native** smart-account rules (`x/abstractaccount`): top-ups go through a linked key bounded to 1 QOR per transfer and 10 QOR per day | `BillAgentAccount`, `BillAgentFactory`, [`gas.js`](agent/src/gas.js) |
 | **Scoped EVM window** | Each user's agent key keeps a QoreChain EVM authorisation window open whose `allowed_targets` is **only that user's account** (the main key's: only the factory), renewed automatically | [`keeper.js`](agent/src/keeper.js), [`qorechain.js`](agent/src/qorechain.js) |
@@ -227,6 +231,7 @@ Node.js 22 (ES modules), [viem](https://viem.sh) for EVM calls, [`@qorechain/sdk
 |---|---|
 | [`bot.js`](agent/src/bot.js) | Multi-user orchestration: one session per Telegram user with their key, agent and keeper; gas top-ups from the main key; caps on accounts and setups |
 | [`agent.js`](agent/src/agent.js) | One user's conversation: pay, approve, settings, setup. Pre-checks the limits so the user gets a clear answer, and turns contract errors into sentences |
+| [`schedule.js`](agent/src/schedule.js) | Recurring bills: parses "every …", works out the next due time (UTC), and gives each occurrence its own bill reference |
 | [`parse.js`](agent/src/parse.js), [`llm.js`](agent/src/llm.js) | Deterministic command parser, and an optional Gemini parser for free-form requests. The model only **proposes** a command, which is validated like typed input and enforced again by the contract |
 | [`chain.js`](agent/src/chain.js) | Contract reads and writes with fixed gas limits, custom-error decoding, one transaction at a time per key |
 | [`qorechain.js`](agent/src/qorechain.js) | Master key file, PQC key registration with proof of possession, EVM windows, QOR transfers (hybrid Cosmos transactions) |
@@ -239,6 +244,8 @@ Chat commands:
 | Command | What happens |
 |---|---|
 | `pay 15 fUSD to IBEDC electricity [ref INV-1]` | Pays at once within the auto-pay limit, otherwise sends an approval link |
+| `pay 0.5 QOR to electricity every month on the 1st` | A recurring bill. Also `every week on monday`, `every day at 08:00`, `every 2 hours`, `every 10 minutes` (at least 5); times in UTC |
+| `schedules` · `stop 2` | List recurring bills · stop one |
 | `status` · `fund` · `billers` · `history` | Limits, balances, today's spend and count, expiry · the `qor1` address to send QOR to from QoreX · allowed billers · recent payments |
 | `pause` · `resume` · `revoke` · `renew 30` | Signed in QoreX |
 | `add biller Campus hostel 0x…` · `remove biller water` | Signed in QoreX |
@@ -325,7 +332,7 @@ AI_USAGE.md                How AI was used to build QoreBills, and inside it
 - **Testnet only.** The PQC precompiles and EVM windows are active on the `qorechain-diana` testnet; QoreChain's docs list the precompiles as not yet active on mainnet.
 - **Billers are addresses.** Real bill payment (electricity tokens, airtime) needs a biller-side integration that turns an on-chain payment into a delivered service; the contract's `ref` field exists for that.
 - **The hosted agent holds the agent keys.** That is by design, since the keys are bounded on chain, but a self-hosted mode where a user names their own agent key at setup is a natural next step.
-- **Recurring schedules** ("pay rent on the 1st") are the next product feature; the contract already supports them through per-bill references and daily caps.
+- **Recurring bills run on the hosted agent.** The schedule lives in the agent's state, not on chain, so it runs while the server runs (after downtime, a missed bill is paid once). That is safe because every payment still goes through the contract's limits; the chain decides what may be paid, the agent only decides when.
 - **The wallet's own display.** QoreX currently shows these messages as "Binary data" (hex) in its signature request, likely because of the line breaks; the signing page shows the same text in plain words just before. A single-line message format would let QoreX display the text itself.
 - **QoreChain's native spending rules** (`x/abstractaccount` authenticators) are an alternative to the contract's own limits. QoreBills keeps the rules in Solidity so they live in one place and can be read by anyone from the contract.
 

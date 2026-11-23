@@ -3,6 +3,10 @@ import { formatUnits, getAddress, parseUnits, toHex, zeroAddress } from "viem";
 import { Kind } from "./abi.js";
 import { ContractRefusal } from "./chain.js";
 import { defaultRef, parseCommand, resolveBiller } from "./parse.js";
+import { describe as describeSchedule, formatUtc, nextRun, occurrenceRef, parseEvery } from "./schedule.js";
+
+export const FAUCET_URL = "https://dashboard.qorechain.io/faucet";
+const MAX_SCHEDULES = 10;
 
 export const HELP = [
   "QoreBills pays your bills from your smart account, inside the limits you set on chain.",
@@ -13,6 +17,14 @@ export const HELP = [
   "fund — the address to send QOR to from QoreX",
   "billers — who I am allowed to pay",
   "history — recent payments",
+  "",
+  "Recurring bills (I pay them on time, no message needed)",
+  "pay 0.5 QOR to electricity every month on the 1st",
+  "pay 0.2 QOR to internet data every week on monday at 18:00",
+  "pay 0.1 QOR to water every 10 minutes — handy for a demo",
+  "schedules — list them; stop 2 — stop schedule 2",
+  "Times are UTC. A payment above your auto-pay limit still asks for your approval.",
+  "",
   "cancel — drop the request waiting for your signature",
   "",
   "Settings (each one you sign in QoreX with your post-quantum key)",
@@ -255,6 +267,8 @@ export function createAgent({
       addresses.toBech32(account),
       "",
       `(The same account in EVM form: ${account}. Use that only from an EVM wallet.)`,
+      "",
+      `No test QOR yet? Get some free from the QoreChain faucet: ${FAUCET_URL}`,
     ].join("\n");
   }
 
@@ -365,6 +379,101 @@ export function createAgent({
       ].join("\n"),
       link: { label: "Approve in QoreX", url: `${publicUrl}/approve/${request.id}` },
     };
+  }
+
+  // ---------------------------------------------------------------- recurring bills
+
+  const schedules = () => state.get().schedules || [];
+  const saveSchedules = (list) => state.set({ schedules: list });
+  const scheduleLine = (s) => `#${s.id} ${s.amount} ${s.token} to ${s.billerName}, ${describeSchedule(s.every)} — next ${formatUtc(s.nextRun)}`;
+
+  async function createSchedule(cmd) {
+    const parsed = parseEvery(cmd.every);
+    if (parsed.error) return { text: parsed.error };
+    const active = schedules().filter((s) => s.active);
+    if (active.length >= MAX_SCHEDULES) return { text: `You already have ${MAX_SCHEDULES} recurring bills. Stop one first (“schedules” lists them).` };
+    const token = cmd.token ? tokenBySymbol(cmd.token) : defaultToken;
+    if (!token) return { text: `I don't know the token ${cmd.token}. I know ${tokens.map((t) => t.symbol).join(", ")}.` };
+    const amount = amountOf(token, cmd.amount);
+    const f = fmtToken(token);
+    const found = resolveBiller(cmd.billerQuery, await chain.billers());
+    if (found.candidates) return { text: `Which one: ${found.candidates.map((b) => b.name).join(", ")}?` };
+    if (!found.biller) return { text: `“${cmd.billerQuery}” is not on your allowlist. Send “billers” to see who I can pay.` };
+    const limits = await chain.tokenState(token);
+    const refuse = (errorName, args) => ({ text: explainRefusal(new ContractRefusal(errorName, args), f) });
+    if (!limits.enabled) return refuse("TokenNotEnabled");
+    if (amount === 0n) return refuse("ZeroAmount");
+    if (amount > limits.maxPerPayment) return refuse("AboveMaxPerPayment", [amount, limits.maxPerPayment]);
+
+    const created = now();
+    const schedule = {
+      id: (state.get().nextScheduleId ?? 1),
+      amount: cmd.amount,
+      token: token.symbol,
+      billerAddress: found.biller.address,
+      billerName: found.biller.name,
+      every: parsed.spec,
+      anchor: created,
+      nextRun: nextRun(parsed.spec, created, created),
+      active: true,
+    };
+    state.set({ nextScheduleId: schedule.id + 1 });
+    // Keep stopped schedules out of the way once there are many.
+    saveSchedules([...schedules().filter((s) => s.active).slice(-50), schedule]);
+    return {
+      text: [
+        `Recurring bill #${schedule.id}: ${f(amount)} to ${schedule.billerName}, ${describeSchedule(schedule.every)}.`,
+        `First payment: ${formatUtc(schedule.nextRun)}.`,
+        amount <= limits.autoPayLimit
+          ? "It is within your auto-pay limit, so I pay it myself each time and tell you."
+          : `It is above your auto-pay limit of ${f(limits.autoPayLimit)}, so each time I send you an approval link to sign in QoreX.`,
+        "Your on-chain daily cap and payments-per-day limit still apply. Send “stop " + schedule.id + "” to stop it.",
+      ].join("\n"),
+    };
+  }
+
+  function listSchedules() {
+    const active = schedules().filter((s) => s.active);
+    if (!active.length) return { text: "No recurring bills. Add one like: pay 0.5 QOR to electricity every month on the 1st" };
+    return { text: ["Recurring bills (UTC):", ...active.map(scheduleLine), "", "Send “stop <number>” to stop one."].join("\n") };
+  }
+
+  function stopSchedule(id) {
+    const list = schedules();
+    const s = list.find((x) => x.id === id && x.active);
+    if (!s) return { text: `There is no recurring bill #${id}. Send “schedules” to see them.` };
+    saveSchedules(list.map((x) => (x.id === id ? { ...x, active: false } : x)));
+    return { text: `Stopped recurring bill #${id} (${s.amount} ${s.token} to ${s.billerName}).` };
+  }
+
+  /**
+   * Pay every recurring bill that is due. Each occurrence has its own bill reference, so the
+   * contract pays it at most once even if this runs twice. After downtime, a missed bill is
+   * paid once (not once per missed period) and the schedule moves on.
+   * Returns the messages to send the owner.
+   */
+  async function runDueSchedules() {
+    if (!chain.accountAddress) return [];
+    const out = [];
+    for (const s of schedules()) {
+      const t = now();
+      if (!s.active || s.nextRun > t) continue;
+      const due = s.nextRun;
+      // Move the schedule on before paying, so a crash mid-payment cannot repeat it.
+      saveSchedules(schedules().map((x) => (x.id === s.id ? { ...x, nextRun: nextRun(s.every, t, s.anchor), lastRun: due } : x)));
+      let reply;
+      try {
+        reply = await payRequest({ amount: s.amount, token: s.token, billerQuery: s.billerAddress, ref: occurrenceRef(s, due) });
+      } catch (error) {
+        if (error instanceof InputError) reply = { text: error.message };
+        else {
+          log.error?.(`[agent] recurring bill #${s.id} failed:`, error.shortMessage || error.message);
+          reply = { text: "The network did not take it. I will try again at the next due time." };
+        }
+      }
+      out.push({ ...reply, text: `Recurring bill #${s.id} (${describeSchedule(s.every)}):\n${reply.text}` });
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------- settings
@@ -560,6 +669,12 @@ export function createAgent({
           return cancel();
         case "pay":
           return await payRequest(cmd);
+        case "schedule":
+          return await createSchedule(cmd);
+        case "schedules":
+          return listSchedules();
+        case "stop_schedule":
+          return stopSchedule(cmd.id);
         case "pay_help":
           return { text: "Say it like: pay 15 fUSD to IBEDC electricity" };
         case "settings_help":
@@ -576,5 +691,5 @@ export function createAgent({
     }
   }
 
-  return { handle, getRequest, draftSetup, submitSignature };
+  return { handle, getRequest, draftSetup, submitSignature, runDueSchedules };
 }

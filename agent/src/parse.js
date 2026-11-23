@@ -19,6 +19,8 @@ const SIMPLE = {
   resume: "resume",
   unpause: "resume",
   revoke: "revoke",
+  schedules: "schedules",
+  recurring: "schedules",
 };
 
 const ADDRESS = /^(0x[0-9a-fA-F]{40}|qor1[02-9ac-hj-np-z]{38})$/;
@@ -31,11 +33,22 @@ export function parseCommand(text, tokens) {
   const trimmed = String(text || "").trim();
   const first = trimmed.split(/\s+/)[0]?.replace(/^\//, "").replace(/@\w+$/, "").toLowerCase();
   if (SIMPLE[first] && trimmed.split(/\s+/).length === 1) return { kind: SIMPLE[first] };
+  // stop schedule 2 / stop 2
+  const stop = /^\/?(?:stop|cancel)(?:\s+schedule)?\s+#?(\d+)$/i.exec(trimmed);
+  if (stop) return { kind: "stop_schedule", id: Number(stop[1]) };
   const settings = parseSettings(trimmed.replace(/^\//, ""), tokens);
   if (settings) return settings;
   if (first !== "pay") return { kind: "unknown" };
 
   let words = trimmed.split(/\s+/).slice(1);
+  // "pay 5 QOR to rent every month on the 1st" -> a recurring bill
+  const everyAt = words.findIndex((w) => w.toLowerCase() === "every");
+  if (everyAt !== -1) {
+    const every = words.slice(everyAt + 1).join(" ");
+    const pay = parseCommand(["pay", ...words.slice(0, everyAt)].join(" "), tokens);
+    if (pay.kind !== "pay" || pay.ref) return { kind: "pay_help" };
+    return { kind: "schedule", amount: pay.amount, token: pay.token, billerQuery: pay.billerQuery, every };
+  }
   let ref = null;
   const refAt = words.findIndex((w) => /^ref:?$/i.test(w));
   if (refAt !== -1) {
