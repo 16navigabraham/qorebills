@@ -71,7 +71,7 @@ The result for the user: **"pay my electricity" just happens, and nothing big ha
 - **Auto-pay below your limit, approval above it:** small bills go through in seconds; bigger ones send you an "Approve in QoreX" button that shows exactly what you are signing.
 - **Never pay a bill twice:** each bill reference (by default biller + month) can be paid once.
 - **Full control from the chat:** `pause`, `resume`, `add biller`, `remove biller`, `limits`, `payments per day`, `renew`, `revoke`, `withdraw`, each as a post-quantum signed message.
-- **Readable signatures:** QoreX shows you plain text ("amount: 60 fUSD"), not hex.
+- **Readable signatures:** the signing page shows the exact text you sign in plain words ("amount: 60 fUSD"), and the contract rebuilds that same text before it accepts your signature.
 - **Multi-user:** anyone can use the bot; each user gets their own account and their own agent key.
 
 ## Try it in 5 minutes
@@ -80,7 +80,7 @@ You need the **QoreX** wallet (mobile app or browser extension) on **testnet**, 
 
 1. Open **[@QoreBills_bot](https://t.me/QoreBills_bot)** and send `/start`.
 2. Tap **Set up in QoreX**. The page opens in the QoreX browser with two **demo billers** already chosen (Electricity and Water; more in the list: Internet data, TV subscription, Hostel rent, School fees, or "Other address…" for your own). The demo billers are test addresses run by QoreBills, so test payments are not lost. The default limits work as they are (QOR: auto-pay 1, max 2 per bill, 5 a day; fUSD: 20, 100, 150; 5 payments a day; 30 days). Tap **Review and sign in QoreX**.
-3. QoreX shows the full setup text; sign it. The bot replies with your new account address.
+3. The page shows the full setup text; sign it in QoreX. The bot replies with your new account address.
 4. From QoreX → Send, send the account some **QOR** to the `qor1…` address the bot gives you (send `fund` to see it again).
 5. In the chat, try:
 
@@ -113,7 +113,7 @@ sequenceDiagram
     else above the auto-pay limit
         A->>C: approvalMessage(…): the exact text to sign
         A-->>U: "Approve in QoreX" link
-        U->>U: QoreX shows the text and signs it with ML-DSA-87
+        U->>U: the page shows the exact text; QoreX signs it with ML-DSA-87
         U->>A: signature (from the signing page)
         A->>C: payWithApproval(…, signature)
         C->>P: pqcKeyStatus(owner): registered, ML-DSA-87, proof of possession?
@@ -314,6 +314,7 @@ AI_USAGE.md                How AI was used to build QoreBills, and inside it
 - **Billers are addresses.** Real bill payment (electricity tokens, airtime) needs a biller-side integration that turns an on-chain payment into a delivered service; the contract's `ref` field exists for that.
 - **The hosted agent holds the agent keys.** That is by design, since the keys are bounded on chain, but a self-hosted mode where a user names their own agent key at setup is a natural next step.
 - **Recurring schedules** ("pay rent on the 1st") are the next product feature; the contract already supports them through per-bill references and daily caps.
+- **The wallet's own display.** QoreX currently shows these messages as "Binary data" (hex) in its signature request, likely because of the line breaks; the signing page shows the same text in plain words just before. A single-line message format would let QoreX display the text itself.
 - **QoreChain's native spending rules** (`x/abstractaccount` authenticators) are an alternative to the contract's own limits. QoreBills keeps the rules in Solidity so they live in one place and can be read by anyone from the contract.
 
 ## Credits

@@ -8,7 +8,7 @@ QoreBills is an AI agent, but the AI is deliberately **not trusted**:
 
 - **Understanding requests.** Typed commands (`pay 15 fUSD to IBEDC`) go through a deterministic parser. When a Gemini API key is configured, free-form messages ("pay the light bill, 15 dollars") go to Gemini with a strict JSON schema ([`agent/src/llm.js`](agent/src/llm.js)). The prompt lists the user's allowed billers and tokens and tells the model never to invent an amount or a biller.
 - **The model only proposes.** Its output becomes the same command object as typed input and goes through the same checks: the biller must be on the account's allowlist, the amount is parsed in the token's decimals (extra decimals are refused), and the limits are checked before anything is sent.
-- **The chain decides.** The `BillAgentAccount` contract enforces the allowlist, the per-payment and daily caps, the daily payment count and the agent's expiry, whatever the agent asks. Anything above the auto-pay limit needs the owner's ML-DSA-87 signature over text the owner reads in QoreX.
+- **The chain decides.** The `BillAgentAccount` contract enforces the allowlist, the per-payment and daily caps, the daily payment count and the agent's expiry, whatever the agent asks. Anything above the auto-pay limit needs the owner's ML-DSA-87 signature over text the owner reads on the signing page before approving in QoreX.
 
 So a prompt injection or a wrong reading can at worst produce a refused request, or a request the owner sees and declines.
 

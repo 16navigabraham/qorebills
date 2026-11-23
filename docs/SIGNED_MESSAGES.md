@@ -6,7 +6,7 @@ Everything the owner authorises in QoreBills is a **plain-text message signed wi
 
 1. The contract renders the text from the call's own arguments: `BillAgentFactory.setupMessage`, `BillAgentAccount.approvalMessage` or `BillAgentAccount.actionMessage`.
 2. The agent fetches that text with an `eth_call` and shows it on the signing page.
-3. QoreX shows the text to the owner and signs:
+3. The signing page shows the text in full, and QoreX signs it (its own signature request currently displays the message as binary data, so the page is where the owner reads it):
 
    ```text
    ML-DSA-87.Sign(ownerKey, UTF-8("qorechain-msg-v1|" + "qorechain-diana" + "|") || text)
