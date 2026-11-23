@@ -46,7 +46,23 @@ The owner signs approvals with QoreChain message signing v1 (`qorechain-msg-v1|q
 cd contracts && npm install && npm test
 ```
 
-Next: the agent service and Telegram bot.
+### The agent (`agent/`)
+
+A Node.js service with a Telegram bot. It only answers its owner's Telegram account.
+
+- `pay 15 fUSD to IBEDC electricity` pays an allowlisted biller. Small bills go through at once; each bill reference (by default biller + month) is paid once.
+- Above the auto-pay limit it sends an approval link. The page opens in the QoreX app, shows the exact text, and asks QoreX to sign it with the owner's ML-DSA-87 key (`signArbitrary`). The agent submits that signature and the contract verifies it on chain.
+- `status`, `billers`, `history` and `cancel` read the account and its limits.
+- With a Gemini key it also understands free-form requests. The model only proposes a command: the agent checks it against the allowlist and the limits, and the contract enforces them again.
+
+```bash
+cd agent && npm install && npm test   # unit tests + an end-to-end run on a local Hardhat node
+cp .env.example .env                  # fill in, then: npm start
+```
+
+Checked on the testnet: an ML-DSA-87 signature over `qorechain-msg-v1|qorechain-diana|` + the approval text verifies with QoreChain's `pqcVerify` precompile, and a changed message does not.
+
+Next: agent key set-up on QoreChain (PQC key and a scoped EVM window), then the testnet deploy.
 
 ## Testnet addresses
 

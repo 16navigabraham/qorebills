@@ -1,0 +1,42 @@
+import { parseAbi } from "viem";
+
+// The parts of BillAgentAccount (../contracts) the agent uses.
+export const billAgentAccountAbi = parseAbi([
+  "function owner() view returns (address)",
+  "function agent() view returns (address)",
+  "function agentExpiry() view returns (uint64)",
+  "function paused() view returns (bool)",
+  "function maxPaymentsPerDay() view returns (uint32)",
+  "function approvalNonce() view returns (uint256)",
+  "function cosmosChainId() view returns (string)",
+  "function limits(address token) view returns (uint128 autoPayLimit, uint128 maxPerPayment, uint128 dailyCap, bool enabled)",
+  "function remainingToday(address token) view returns (uint256)",
+  "function today() view returns (uint256)",
+  "function paymentsOnDay(uint256 day) view returns (uint256)",
+  "function refPaid(bytes32 ref) view returns (bool)",
+  "function billerList() view returns (address[])",
+  "function billerInfo(address biller) view returns (bool allowed, string name)",
+  "function approvalMessage(address biller, address token, uint256 amount, bytes32 ref, uint64 deadline, uint256 nonce) view returns (bytes)",
+  "function pay(address biller, address token, uint256 amount, bytes32 ref)",
+  "function payWithApproval(address biller, address token, uint256 amount, bytes32 ref, uint64 deadline, bytes pqSignature)",
+  "event BillPaid(address indexed biller, address indexed token, uint256 amount, bytes32 indexed ref, bool ownerApproved)",
+  "error NotOwner()",
+  "error NotAgent()",
+  "error AgentExpired()",
+  "error AccountPaused()",
+  "error BillerNotAllowed(address biller)",
+  "error TokenNotEnabled(address token)",
+  "error ZeroAmount()",
+  "error RefAlreadyPaid(bytes32 ref)",
+  "error AboveMaxPerPayment(uint256 amount, uint256 max)",
+  "error NeedsOwnerApproval(uint256 amount, uint256 autoPayLimit)",
+  "error DailyCapExceeded(uint256 wouldSpend, uint256 cap)",
+  "error DailyPaymentCountExceeded(uint256 max)",
+  "error ApprovalExpired()",
+  "error OwnerPqcKeyMissing()",
+  "error InvalidOwnerSignature()",
+  "error InvalidLimits()",
+  "error NativeTransferFailed()",
+]);
+
+export const erc20Abi = parseAbi(["function balanceOf(address) view returns (uint256)"]);

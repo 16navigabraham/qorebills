@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QoreBills approval</title>
+<style>
+  :root { --bg: #f6f7fb; --card: #ffffff; --text: #141824; --muted: #5d6475; --line: #e3e6ee; --accent: #3a4fd9; --ok: #157a4a; --bad: #b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f121a; --card: #171b26; --text: #eef0f6; --muted: #a2a9ba; --line: #2a3040; --accent: #8193ff; --ok: #5bd49a; --bad: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .summary { font-size: 1.15rem; font-weight: 600; }
+  pre { white-space: pre-wrap; word-break: break-all; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0 0; color: var(--muted); }
+  button { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { margin-top: 14px; min-height: 1.5em; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  a { color: var(--accent); word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Approve a bill payment</h1>
+  <p class="sub">Your QoreBills agent needs your post-quantum signature for this one.</p>
+  <div class="card">
+    <div class="summary" id="summary">Loading…</div>
+    <div class="sub" id="expiry" style="margin:4px 0 0"></div>
+  </div>
+  <div class="card">
+    <strong>You will sign exactly this text</strong>
+    <pre id="message"></pre>
+  </div>
+  <button id="sign" disabled>Sign with QoreX</button>
+  <div id="status" role="status"></div>
+</main>
+<script>
+(() => {
+  const id = location.pathname.split("/").pop();
+  const $ = (x) => document.getElementById(x);
+  const say = (text, cls = "") => { $("status").className = cls; $("status").textContent = text; };
+  let approval = null;
+
+  async function load() {
+    const r = await fetch(`/api/approvals/${id}`, { cache: "no-store" });
+    if (!r.ok) { $("summary").textContent = "This approval link is not valid."; return; }
+    approval = await r.json();
+    $("summary").textContent = approval.summary;
+    $("message").textContent = approval.message;
+    $("expiry").textContent = `Valid until ${new Date(approval.expiresAt * 1000).toLocaleString()}`;
+    if (approval.status === "paid") {
+      say("Already approved and paid.", "ok");
+    } else if (approval.status !== "pending") {
+      say(`This approval is ${approval.status}. Ask the bot again.`, "bad");
+    } else {
+      $("sign").disabled = false;
+    }
+  }
+
+  // QoreX injects its provider after the page loads, so wait for it a little.
+  async function wallet() {
+    for (let i = 0; i < 20 && !window.qorex?.native; i++) await new Promise((r) => setTimeout(r, 150));
+    return window.qorex?.native || null;
+  }
+
+  $("sign").addEventListener("click", async () => {
+    $("sign").disabled = true;
+    try {
+      const q = await wallet();
+      if (!q) throw new Error("QoreX not found. Open this link in the QoreX app's browser (testnet mode) or with the QoreX extension.");
+      if (Array.isArray(q.capabilities) && !q.capabilities.includes("signArbitrary")) throw new Error("This QoreX version cannot sign messages. Update QoreX.");
+      say("Waiting for QoreX…");
+      await q.enable(approval.cosmosChainId);
+      const { bech32Address } = await q.getKey(approval.cosmosChainId);
+      const signature = await q.signArbitrary(approval.cosmosChainId, bech32Address, approval.message);
+      say("Signed. Sending the payment…");
+      const r = await fetch(`/api/approvals/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ signature }),
+      });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(out.error || "The payment was not made.");
+      $("status").className = "ok";
+      $("status").textContent = "Paid. Your signature was verified on chain. Transaction: ";
+      const tx = document.createElement("code");
+      tx.textContent = out.txHash;
+      $("status").appendChild(tx);
+    } catch (error) {
+      say(error.message || String(error), "bad");
+      $("sign").disabled = false;
+    }
+  });
+
+  load().catch(() => { $("summary").textContent = "Could not load this approval."; });
+})();
+</script>
+</body>
+</html>

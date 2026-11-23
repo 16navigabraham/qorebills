@@ -1,0 +1,57 @@
+// A small Telegram Bot API client using long polling: the bot asks Telegram for
+// new messages, so the server needs no public webhook. Only the owner's
+// Telegram account is served; anyone else gets a refusal and nothing runs.
+
+export function createTelegram({ token, fetchImpl = fetch, log = console }) {
+  const base = `https://api.telegram.org/bot${token}`;
+
+  async function call(method, body, timeoutMs = 30_000) {
+    const response = await fetchImpl(`${base}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!data.ok) throw new Error(`Telegram ${method}: ${data.description || response.status}`);
+    return data.result;
+  }
+
+  async function send(chatId, { text, link }) {
+    const body = { chat_id: chatId, text: text.slice(0, 4000), link_preview_options: { is_disabled: true } };
+    if (link) body.reply_markup = { inline_keyboard: [[{ text: link.label, url: link.url }]] };
+    return call("sendMessage", body);
+  }
+
+  async function poll({ ownerId, onMessage, signal }) {
+    let offset = 0;
+    while (!signal?.aborted) {
+      let updates;
+      try {
+        updates = await call("getUpdates", { offset, timeout: 50, allowed_updates: ["message"] }, 60_000);
+      } catch (error) {
+        if (signal?.aborted) return;
+        log.warn?.("[telegram] poll failed:", error.message);
+        await new Promise((r) => setTimeout(r, 5_000));
+        continue;
+      }
+      for (const update of updates) {
+        offset = update.update_id + 1;
+        const message = update.message;
+        if (!message?.text || message.chat?.type !== "private") continue;
+        if (String(message.from?.id) !== String(ownerId)) {
+          await send(message.chat.id, { text: "This QoreBills agent works for one owner only." }).catch(() => {});
+          continue;
+        }
+        try {
+          await send(message.chat.id, await onMessage(message.text));
+        } catch (error) {
+          log.error?.("[telegram] handling failed:", error.shortMessage || error.message);
+          await send(message.chat.id, { text: "Something went wrong talking to the chain. Try again in a moment." }).catch(() => {});
+        }
+      }
+    }
+  }
+
+  return { send, poll };
+}
