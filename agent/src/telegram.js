@@ -27,6 +27,9 @@ export function createTelegram({ token, fetchImpl = fetch, log = console }) {
     return call("sendMessage", body);
   }
 
+  /** The command menu users see when they type “/”. */
+  const setCommands = (commands) => call("setMyCommands", { commands });
+
   async function poll({ onMessage, signal, perMinute = 12 }) {
     let offset = 0;
     const recent = new Map(); // userId -> timestamps of recent messages
@@ -65,5 +68,5 @@ export function createTelegram({ token, fetchImpl = fetch, log = console }) {
     }
   }
 
-  return { send, poll };
+  return { send, setCommands, poll };
 }

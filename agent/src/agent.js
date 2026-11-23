@@ -9,36 +9,27 @@ export const FAUCET_URL = "https://dashboard.qorechain.io/faucet";
 const MAX_SCHEDULES = 10;
 
 export const HELP = [
-  "QoreBills pays your bills from your smart account, inside the limits you set on chain.",
+  "QoreBills pays your bills for you, within limits only you can change.",
   "",
-  "Paying",
-  "pay 15 fUSD to IBEDC electricity — pay a bill (add “ref INV-123” for the bill's own reference)",
-  "status — limits, balances and what is left today",
-  "fund — the address to send QOR to from QoreX",
-  "billers — who I am allowed to pay",
-  "history — recent payments",
+  "💸 Pay",
+  "pay 15 fUSD to electricity",
+  "pay 0.5 QOR to water ref INV-204",
   "",
-  "Recurring bills (I pay them on time, no message needed)",
-  "pay 0.5 QOR to electricity every month on the 1st",
-  "pay 0.2 QOR to internet data every week on monday at 18:00",
-  "pay 0.1 QOR to water every 10 minutes — handy for a demo",
-  "schedules — list them; stop 2 — stop schedule 2",
-  "Times are UTC. A payment above your auto-pay limit still asks for your approval.",
+  "🔁 Recurring",
+  "pay 0.5 QOR to rent every month on the 1st",
+  "pay 0.2 QOR to data every week on monday",
+  "schedules · stop 1",
   "",
-  "cancel — drop the request waiting for your signature",
+  "📊 Your account",
+  "status · fund · billers · history",
   "",
-  "Settings (each one you sign in QoreX with your post-quantum key)",
-  "pause / resume — stop or restart all payments",
-  "add biller Campus hostel 0x… — allow a new biller",
-  "remove biller water board",
-  "limits fUSD 20 100 150 — auto-pay, max per bill, daily cap (or “limits fUSD off”)",
-  "payments per day 5",
-  "renew 30 — let me pay for 30 more days",
-  "revoke — remove my permission to pay",
-  "withdraw 10 fUSD to 0x… — move money out",
-  "setup — create a new account",
+  "🔐 Settings (you approve each one in QoreX)",
+  "pause · resume · renew 30 · revoke",
+  "add biller Hostel 0x… · remove biller water",
+  "limits fUSD 20 100 150 (auto-pay, max per bill, daily cap)",
+  "payments per day 5 · withdraw 10 fUSD to 0x…",
   "",
-  "Above your auto-pay limit I ask for your approval, signed in QoreX the same way.",
+  "Small bills are paid instantly. Anything above your auto-pay limit waits for your approval.",
 ].join("\n");
 
 const SETTINGS_HELP = "Settings commands look like: add biller Campus hostel 0x…, limits fUSD 20 100 150, payments per day 5, renew 30, withdraw 10 fUSD to 0x…";
@@ -187,8 +178,8 @@ export function createAgent({
     const request = newRequest({ kind: "setup", status: "draft", deadline: nowSeconds() + requestMinutes * 60 });
     return {
       text: [
-        chain.accountAddress ? "This creates a new account; the current one keeps its money until you withdraw it." : "Let's set up your bill account.",
-        "Open the link in the QoreX app's browser, choose your billers and limits, and sign the setup with your post-quantum key. I pay the gas.",
+        chain.accountAddress ? "This creates a new account. Your current one keeps its money until you withdraw it." : "Get started in one step:",
+        "Open the link in the QoreX browser, pick your billers and limits, and sign once. Setup is free; I cover the gas.",
       ].join("\n"),
       link: { label: "Set up in QoreX", url: `${publicUrl}/setup/${request.id}` },
     };
@@ -646,8 +637,13 @@ export function createAgent({
       return {
         ...setup,
         text: [
-          "Welcome to QoreBills: an AI agent that pays your bills from a smart account, inside limits enforced on QoreChain.",
-          "Big payments and every settings change need your post-quantum (ML-DSA-87) signature from the QoreX wallet.",
+          "Welcome to QoreBills 👋",
+          "Your bills, paid on time, from your own smart account.",
+          "",
+          "• Small bills: paid instantly",
+          "• Recurring bills: paid on schedule",
+          "• Big bills: wait for your approval",
+          "Your limits live on QoreChain, and only your QoreX wallet can change them, with a post-quantum signature.",
           "",
           setup.text,
         ].join("\n"),
@@ -683,7 +679,7 @@ export function createAgent({
           if (["pause", "resume", "revoke", "renew", "add_biller", "remove_biller", "set_limits", "disable_token", "set_max_payments", "withdraw"].includes(cmd.kind)) {
             return await settingsRequest(cmd);
           }
-          return { text: `I didn't understand that.\n\n${HELP}` };
+          return { text: "I didn't catch that. Try “pay 15 fUSD to electricity”, or send “help” to see everything I can do." };
       }
     } catch (error) {
       if (error instanceof InputError) return { text: error.message };

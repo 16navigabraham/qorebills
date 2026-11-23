@@ -79,6 +79,19 @@ const bot = createBot({
 const server = createWebServer({ agent: bot, log });
 server.listen(config.port, () => log.info(`[qorebills] signing pages on :${config.port}`));
 await bot.start();
+telegram
+  .setCommands([
+    { command: "help", description: "What I can do" },
+    { command: "status", description: "Balance, limits and what's left today" },
+    { command: "fund", description: "Your account address to top up" },
+    { command: "billers", description: "Who I can pay" },
+    { command: "history", description: "Recent payments" },
+    { command: "schedules", description: "Your recurring bills" },
+    { command: "pause", description: "Stop all payments" },
+    { command: "resume", description: "Restart payments" },
+    { command: "setup", description: "Create a new account" },
+  ])
+  .catch((error) => log.warn("[telegram] command menu not set:", error.message));
 
 const controller = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"]) {
