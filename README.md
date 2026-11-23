@@ -48,7 +48,7 @@ cd contracts && npm install && npm test
 
 ### The agent (`agent/`)
 
-A Node.js service with a Telegram bot. It only answers its owner's Telegram account.
+A Node.js service with a Telegram bot, [@QoreBills_bot](https://t.me/QoreBills_bot). It only answers its owner's Telegram account.
 
 - `pay 15 fUSD to IBEDC electricity` pays an allowlisted biller. Small bills go through at once; each bill reference (by default biller + month) is paid once.
 - Above the auto-pay limit it sends an approval link. The page opens in the QoreX app, shows the exact text, and asks QoreX to sign it with the owner's ML-DSA-87 key (`signArbitrary`). The agent submits that signature and the contract verifies it on chain.
