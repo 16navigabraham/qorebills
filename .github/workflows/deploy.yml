@@ -28,7 +28,7 @@ env:
   APP_DIR: ~/qorebills
   REPO_URL: https://github.com/16navigabraham/qorebills.git
   PUBLIC_URL: https://bills.145-241-232-214.sslip.io
-  FACTORY_ADDRESS: ""
+  FACTORY_ADDRESS: "0xF0385815a19009FBC01ba24773469c5e4e4e9b2D"
 
 jobs:
   test:

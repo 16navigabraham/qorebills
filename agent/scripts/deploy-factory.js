@@ -3,7 +3,7 @@
 // Registers the deployer's ML-DSA-87 key if needed, opens a short unscoped EVM window
 // (contract creation needs one), deploys, then closes the window.
 import fs from "node:fs";
-import { createPublicClient, createWalletClient, defineChain, http } from "viem";
+import { createPublicClient, createWalletClient, defineChain, http, parseGwei } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { createQoreAccount, loadOrCreateMnemonic } from "../src/qorechain.js";
 
@@ -29,13 +29,27 @@ if (balance < 2_000_000n) throw new Error("Fund the deployer with at least 2 QOR
 const reg = await qore.ensureRegistered();
 console.log(reg.already ? "PQC key already registered" : `Registered ML-DSA-87 key with proof of possession: ${reg.txHash}`);
 
-console.log("Opening a deploy window (unscoped, 600 blocks, 3 transactions, 5 QOR)…");
-console.log(`  ${(await qore.openWindow({ blocks: 600, maxTxs: 3, maxValueUqor: 5_000_000n })).txHash}`);
+const open = await qore.window();
+if (open.live && open.allowedTargets.length === 0 && BigInt(open.remainingTxs) > 0n && BigInt(open.remainingBlocks) > 60n) {
+  console.log(`Using the open deploy window (${open.remainingBlocks} blocks left)`);
+} else {
+  console.log("Opening a deploy window (unscoped, 600 blocks, 3 transactions, 5 QOR)…");
+  console.log(`  ${(await qore.openWindow({ blocks: 600, maxTxs: 3, maxValueUqor: 5_000_000n })).txHash}`);
+}
 
 const chain = defineChain({ id: EVM_CHAIN_ID, name: "QoreChain testnet", nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 }, rpcUrls: { default: { http: [EVM_RPC] } } });
 const pub = createPublicClient({ chain, transport: http(EVM_RPC) });
 const wallet = createWalletClient({ chain, transport: http(EVM_RPC), account: privateKeyToAccount(qore.privateKey) });
-const hash = await wallet.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode, args: [CHAIN_ID] });
+// The public RPC caps eth_estimateGas and eth_call at about 5M gas, below what this deploy
+// needs (about 5.9M; it creates BillAgentDeployer in its constructor), so set the gas here.
+const hash = await wallet.deployContract({
+  abi: artifact.abi,
+  bytecode: artifact.bytecode,
+  args: [CHAIN_ID],
+  gas: 7_000_000n,
+  maxFeePerGas: parseGwei("150"),
+  maxPriorityFeePerGas: parseGwei("12.5"),
+});
 console.log(`Deploying BillAgentFactory: ${hash}`);
 const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 });
 if (receipt.status !== "success") throw new Error("Deploy reverted");

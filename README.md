@@ -61,7 +61,16 @@ cp .env.example .env                  # fill in, then: npm start
 
 ## Testnet addresses
 
-To be added after deployment (QoreChain testnet, chain id `qorechain-diana`, EVM chain id `9800`).
+QoreChain testnet, chain id `qorechain-diana`, EVM chain id `9800`.
+
+| Contract | EVM address | Native address |
+| --- | --- | --- |
+| `BillAgentFactory` | `0xF0385815a19009FBC01ba24773469c5e4e4e9b2D` | `qor17qu9s9dpjqylhsqm5frhx35ute8yaxedecfxqh` |
+| `BillAgentDeployer` | `0x06C4E1194deb3c3BbE91022fc4507b6BF5023114` | `qor1qmzwzx2dav7rh053qghug5rmd06syvg5hhmme2` |
+
+Deployed 23 November 2026 in transaction `0x05bd2652e47accc97f24ea6d13939ba1fc7d95a33fd1933a703fd0f44b2ab016` (5,919,188 gas). The deployer registered its ML-DSA-87 key with proof of possession and deployed inside a short EVM window, which it closed afterwards. Owners' accounts are created by the factory and listed in its `AccountCreated` events.
+
+Note for other builders: the public testnet RPC caps `eth_call` and `eth_estimateGas` at about 5M gas, while a transaction may use up to 30M. The factory deploy (about 5.9M) and `createAccount` (about 5M) therefore set their gas limit instead of estimating it.
 
 ## Credits
 

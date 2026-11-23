@@ -56,14 +56,23 @@ export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAdd
   };
   const read = (functionName, args = []) => publicClient.readContract({ ...contract(), functionName, args });
 
+  // Gas limits per call. The public QoreChain RPC caps eth_call and eth_estimateGas at
+  // about 5M gas, below what createAccount needs, so the agent never relies on estimates.
+  const GAS = { pay: 400_000n, payWithApproval: 1_000_000n, executeSigned: 1_000_000n, createAccount: 7_500_000n };
+
   async function send(target, functionName, args) {
+    const gas = GAS[functionName];
     let request;
     try {
-      ({ request } = await publicClient.simulateContract({ ...target, functionName, args, account: agent }));
+      ({ request } = await publicClient.simulateContract({ ...target, functionName, args, account: agent, gas }));
     } catch (error) {
-      throw refusalFrom(error) || error;
+      const refusal = refusalFrom(error);
+      if (refusal) throw refusal;
+      // Simulation ran out of the RPC's gas cap: send with the fixed limit; a real refusal still reverts on chain.
+      if (!/out of gas|gas required exceeds|gas uint64 overflow/i.test(String(error?.details || error?.message))) throw error;
+      request = { ...target, functionName, args, account: agent, chain };
     }
-    const hash = await wallet.writeContract(request);
+    const hash = await wallet.writeContract({ ...request, gas });
     const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     if (receipt.status !== "success") throw new Error(`Transaction ${hash} reverted.`);
     return { hash, receipt };
