@@ -33,6 +33,9 @@
   #status { margin-top: 14px; min-height: 1.5em; word-break: break-all; }
   .ok { color: var(--ok); } .bad { color: var(--bad); }
   [hidden] { display: none !important; }
+  .help { display: block; font-size: .8rem; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+  input.invalid { border-color: var(--bad); }
+  .check { margin: 10px 0 0; font-size: .92rem; }
   @media (max-width: 420px) {
     .grid { grid-template-columns: 1fr; }
     .custom { grid-template-columns: 1fr; }
@@ -57,8 +60,8 @@
 
     <div class="card">
       <div class="grid" style="grid-template-columns: 1fr 1fr">
-        <label>Payments per day<input type="number" id="perDay" min="1" max="100" value="5" required></label>
-        <label>Agent can pay for (days)<input type="number" id="days" min="1" max="365" value="30" required></label>
+        <label>Payments per day<input type="number" id="perDay" min="1" max="100" value="5" required><small class="help">How many bills the agent may pay in one day (1 to 100).</small></label>
+        <label>Agent can pay for (days)<input type="number" id="days" min="1" max="365" value="30" required><small class="help">After this the agent stops until you send “renew” (1 to 365).</small></label>
       </div>
     </div>
 
@@ -81,13 +84,86 @@
   const DEFAULTS = { fUSD: ["20", "100", "150", true], QOR: ["1", "2", "5", true] };
   let request = null;
 
-  function input(labelText, value, attrs = {}) {
+  function input(labelText, value, attrs = {}, helpText = "") {
     const label = document.createElement("label");
     label.textContent = labelText;
     const el = document.createElement("input");
     Object.assign(el, { type: "text", value, ...attrs });
     label.appendChild(el);
+    if (helpText) {
+      const help = document.createElement("small");
+      help.className = "help";
+      help.textContent = helpText;
+      label.appendChild(help);
+    }
     return { label, el };
+  }
+
+  const HELP = {
+    autoPay: "Bills up to this amount are paid at once, without asking you.",
+    maxPer: "The most any one bill can be, even when you approve it.",
+    daily: "The most the agent can spend in one day, approved bills included.",
+  };
+
+  // Check one token's limits as the user types; say what is wrong, or what the limits mean.
+  function checkToken(symbol) {
+    const box = $("limits").querySelector(`[data-box="${symbol}"]`);
+    const on = box.querySelector("input[type=checkbox]").checked;
+    const fields = Object.fromEntries([...box.querySelectorAll("input[type=text]")].map((el) => [el.dataset.key, el]));
+    const note = box.querySelector(".check");
+    for (const el of Object.values(fields)) el.classList.remove("invalid");
+    if (!on) { note.textContent = ""; return true; }
+    const decimals = request?.tokenDecimals?.[symbol] ?? 18;
+    const fail = (keys, text) => {
+      for (const k of keys) fields[k].classList.add("invalid");
+      note.className = "check bad";
+      note.textContent = text;
+      return false;
+    };
+    const value = {};
+    for (const [key, el] of Object.entries(fields)) {
+      const v = el.value.trim();
+      if (!/^\d+(\.\d+)?$/.test(v)) return fail([key], `Enter a number for “${el.parentElement.firstChild.textContent}”, like 5 or 0.5.`);
+      if ((v.split(".")[1] || "").length > decimals) return fail([key], `${symbol} allows at most ${decimals} decimal places.`);
+      value[key] = Number(v);
+    }
+    const f = (n) => `${n} ${symbol}`;
+    if (value.daily <= 0) return fail(["daily"], "The daily cap must be more than zero.");
+    if (value.autoPay > value.maxPer) {
+      return fail(["autoPay", "maxPer"], `Auto-pay (${f(value.autoPay)}) can't be more than the max per bill (${f(value.maxPer)}): lower auto-pay or raise the max per bill.`);
+    }
+    if (value.maxPer > value.daily) {
+      return fail(["maxPer", "daily"], `The max per bill (${f(value.maxPer)}) can't be more than the daily cap (${f(value.daily)}): lower the max per bill or raise the daily cap.`);
+    }
+    note.className = "check ok";
+    if (value.autoPay === 0) note.textContent = `Every bill needs your signature. Nothing over ${f(value.maxPer)} per bill or ${f(value.daily)} a day.`;
+    else if (value.autoPay === value.maxPer) note.textContent = `Bills up to ${f(value.autoPay)} are paid at once. Nothing over ${f(value.maxPer)} per bill or ${f(value.daily)} a day.`;
+    else note.textContent = `Bills up to ${f(value.autoPay)} are paid at once. Bills over ${f(value.autoPay)} and up to ${f(value.maxPer)} need your signature. Nothing over ${f(value.maxPer)} per bill or ${f(value.daily)} a day.`;
+    return true;
+  }
+
+  function checkWhole(el, min, max) {
+    const n = Number(el.value);
+    const ok = Number.isInteger(n) && n >= min && n <= max;
+    el.classList.toggle("invalid", !ok);
+    return ok;
+  }
+
+  // Enable the sign button only when everything on the page is valid.
+  function validate() {
+    if (!request) return;
+    const boxes = [...$("limits").querySelectorAll("[data-box]")];
+    let ok = boxes.map((b) => checkToken(b.dataset.box)).every(Boolean);
+    if (!boxes.some((b) => b.querySelector("input[type=checkbox]").checked)) {
+      ok = false;
+      say("Turn on at least one token to pay bills in.", "bad");
+    } else if (!$("go").dataset.busy) {
+      say("");
+    }
+    ok = checkWhole($("perDay"), 1, 100) && ok;
+    ok = checkWhole($("days"), 1, 365) && ok;
+    if (!$("billers").querySelector(".biller")) ok = false;
+    if (!$("go").dataset.busy) $("go").disabled = !ok;
   }
 
   let demoBillers = [];
@@ -135,25 +211,29 @@
       const [autoPay, maxPer, daily, on] = DEFAULTS[symbol] || ["1", "2", "5", false];
       const box = document.createElement("div");
       box.style.marginBottom = "12px";
+      box.dataset.box = symbol;
       box.innerHTML = `<label class="toggle"><input type="checkbox" data-token="${symbol}"> Pay in ${symbol}</label>`;
       box.querySelector("input").checked = on;
       const grid = document.createElement("div");
       grid.className = "grid";
       for (const [key, text, value] of [["autoPay", "Auto-pay up to", autoPay], ["maxPer", "Max per bill", maxPer], ["daily", "Daily cap", daily]]) {
-        const f = input(text, value, { inputMode: "decimal" });
+        const f = input(text, value, { inputMode: "decimal" }, HELP[key]);
         f.el.dataset.token = symbol;
         f.el.dataset.key = key;
         grid.appendChild(f.label);
       }
       box.appendChild(grid);
+      const note = document.createElement("p");
+      note.className = "check";
+      box.appendChild(note);
       const toggle = box.querySelector("input[type=checkbox]");
       grid.hidden = !toggle.checked;
-      toggle.onchange = () => { grid.hidden = !toggle.checked; };
+      toggle.onchange = () => { grid.hidden = !toggle.checked; validate(); };
       $("limits").appendChild(box);
     }
     const hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Bills up to the auto-pay limit are paid at once. Bigger ones wait for your signature, and nothing goes above the max per bill or the daily cap.";
+    hint.textContent = "Each limit is enforced by your smart account on QoreChain, not by the AI: auto-pay ≤ max per bill ≤ daily cap.";
     $("limits").appendChild(hint);
   }
 
@@ -176,11 +256,16 @@
     return { billers, limits, paymentsPerDay: Number($("perDay").value), days: Number($("days").value) };
   }
 
-  $("addBiller").onclick = () => addBiller();
+  $("addBiller").onclick = () => { addBiller(); validate(); };
+  $("form").addEventListener("input", validate);
+  $("billers").addEventListener("click", () => setTimeout(validate));
 
   $("form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    validate();
+    if ($("go").disabled) return;
     $("go").disabled = true;
+    $("go").dataset.busy = "1";
     try {
       say("Connecting to QoreX…");
       const owner = await QoreXSign.address(request.cosmosChainId);
@@ -195,6 +280,7 @@
       say(`Your account is ready. Go back to Telegram to fund it and pay your first bill. Transaction: ${out.txHash}`, "ok");
     } catch (error) {
       say(error.message || String(error), "bad");
+      delete $("go").dataset.busy;
       $("go").disabled = false;
     }
   });
@@ -210,6 +296,7 @@
     renderLimits(request.tokens);
     // Start with two demo billers so a first try needs no addresses at all.
     if (demoBillers.length >= 2) { addBiller(0); addBiller(1); } else addBiller();
+    validate();
   })().catch(() => say("Could not load this setup.", "bad"));
 })();
 </script>

@@ -454,7 +454,7 @@ export function createAgent({
       expiresAt: r.deadline,
       txHash: r.txHash || null,
       error: r.error || null,
-      ...(r.kind === "setup" ? { tokens: tokens.map((t) => t.symbol), demoBillers } : {}),
+      ...(r.kind === "setup" ? { tokens: tokens.map((t) => t.symbol), tokenDecimals: Object.fromEntries(tokens.map((t) => [t.symbol, t.decimals])), demoBillers } : {}),
     };
   }
 
