@@ -12,8 +12,14 @@
 
 Built for [Build Before Q-Day](https://build.qorechain.io), **Post-Quantum AI Agents** track. `#BuildBeforeQDay`
 
+<p align="center">
+  <a href="https://youtube.com/shorts/-j07xWP_y0k"><img src="assets/cover-1600x900.png" alt="Watch the QoreBills demo video on YouTube" width="720"></a><br>
+  <b><a href="https://youtube.com/shorts/-j07xWP_y0k">▶ Watch the 2-minute demo</a></b>: setup in QoreX, auto-paid bills, and a big payment approved with an ML-DSA-87 signature verified on chain
+</p>
+
 | | |
 |---|---|
+| Demo video | [youtube.com/shorts/-j07xWP_y0k](https://youtube.com/shorts/-j07xWP_y0k) (1:59) |
 | Try it | [@QoreBills_bot](https://t.me/QoreBills_bot) on Telegram + the QoreX wallet on testnet ([how](#try-it-in-5-minutes)) |
 | Network | QoreChain testnet `qorechain-diana`, EVM chain id `9800` |
 | Factory | [`0xF0385815a19009FBC01ba24773469c5e4e4e9b2D`](#testnet-deployment) |
