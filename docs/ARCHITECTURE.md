@@ -189,6 +189,7 @@ flowchart LR
 | `contracts/test/BillAgentFactory.test.js` | Exact setup text, creation by any submitter, changed or reused or expired or foreign setups, the deployer guard, size limits |
 | `agent/test/parse.test.js` | Commands, biller matching, default references, wallet signature parsing |
 | `agent/test/schedule.test.js` | Parsing schedules, next due times (weekdays, month ends, intervals), occurrence references |
+| `agent/test/llm.test.js` | What the agent does with Gemini's answer (stubbed): payments, recurring bills, refusing incomplete answers |
 | `agent/test/keeper.test.js` | Gas top-ups, registration, scoped windows, renewal |
 | `agent/test/e2e.test.js` | One user against a local Hardhat node: setup, payments, approvals, recurring bills (auto-paid, approval link, never twice, stop), every settings command, request replacement, revoke |
 | `agent/test/bot.e2e.test.js` | Two users: separate accounts and agent keys, separate payments, one user's wallet cannot approve the other's payment, user cap, restart |

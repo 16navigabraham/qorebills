@@ -32,6 +32,16 @@ export const HELP = [
   "Small bills are paid instantly. Anything above your auto-pay limit waits for your approval.",
 ].join("\n");
 
+/** With Gemini on, people can just say what they want; the commands are the shortcut. */
+const PLAIN_LANGUAGE = [
+  "Just tell me what to pay, in your own words:",
+  "“pay my light bill, 15 dollars”",
+  "“send 0.5 QOR for rent every month on the 1st”",
+  "“how much can I still spend today?”",
+  "",
+  "Or use the shortcuts below.",
+].join("\n");
+
 const SETTINGS_HELP = "Settings commands look like: add biller Campus hostel 0x…, limits fUSD 20 100 150, payments per day 5, renew 30, withdraw 10 fUSD to 0x…";
 const NAME = /^[\x20-\x7e]{1,40}$/;
 
@@ -121,6 +131,7 @@ export function createAgent({
   now = () => Date.now(),
   log = console,
 }) {
+  const help = parseWithLlm ? HELP.replace("\n\n", `\n\n${PLAIN_LANGUAGE}\n\n`) : HELP;
   const defaultToken = tokens.find((t) => t.symbol === "fUSD") || tokens[0];
   const tokenBySymbol = (s) => tokens.find((t) => t.symbol.toLowerCase() === String(s).toLowerCase());
   const tokenByAddress = (a) => tokens.find((t) => t.address.toLowerCase() === String(a).toLowerCase());
@@ -654,7 +665,7 @@ export function createAgent({
         case "fund":
           return { text: fundText(chain.accountAddress) };
         case "help":
-          return { text: HELP };
+          return { text: help };
         case "status":
           return await status();
         case "billers":
@@ -679,7 +690,7 @@ export function createAgent({
           if (["pause", "resume", "revoke", "renew", "add_biller", "remove_biller", "set_limits", "disable_token", "set_max_payments", "withdraw"].includes(cmd.kind)) {
             return await settingsRequest(cmd);
           }
-          return { text: "I didn't catch that. Try “pay 15 fUSD to electricity”, or send “help” to see everything I can do." };
+          return { text: "I didn't catch that. Tell me a bill to pay, like “pay 15 fUSD to electricity”, or send “help”." };
       }
     } catch (error) {
       if (error instanceof InputError) return { text: error.message };

@@ -72,7 +72,7 @@ The result for the user: **"pay my electricity" just happens, and nothing big ha
 
 ### Product features
 
-- **Chat-first:** everything happens in a Telegram chat. Billers can be named loosely ("pay 15 to ibedc"), and with a Gemini key the agent also understands free-form requests.
+- **Chat-first:** everything happens in a Telegram chat. Billers can be named loosely ("pay 15 to ibedc"), and the hosted bot uses Gemini, so you can also just say it: "pay my light bill, 15 dollars" or "send 0.5 QOR for rent every month on the 1st". Gemini only proposes a command; the same checks and the contract decide.
 - **One-signature onboarding:** a mobile setup page opens inside the QoreX app; you pick billers and limits and sign once. The agent pays the gas; you never need an EVM window or gas of your own.
 - **Auto-pay below your limit, approval above it:** small bills go through in seconds; bigger ones send you an "Approve in QoreX" button that shows exactly what you are signing.
 - **Recurring bills, paid on time:** "pay 0.5 QOR to electricity every month on the 1st" (or every week, every day at 08:00, every 10 minutes for a demo). The agent pays each one when it is due and tells you; one above your auto-pay limit sends you an approval link instead. Each occurrence has its own bill reference, so the contract pays it at most once.
