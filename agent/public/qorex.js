@@ -38,5 +38,41 @@ window.QoreXSign = (() => {
     return out;
   }
 
-  return { wallet, address, sign, post };
+  /**
+   * Links tapped in Telegram open in Telegram's own browser, which has no wallet. When QoreX
+   * doesn't appear, show how to open this page in QoreX, with a button that copies the link.
+   */
+  async function guide() {
+    for (let i = 0; i < 20 && !window.qorex?.native; i++) await new Promise((r) => setTimeout(r, 150));
+    if (window.qorex?.native) return true;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.borderColor = "var(--accent)";
+    card.innerHTML = `
+      <strong>Open this page in QoreX</strong>
+      <p class="sub" style="margin:6px 0 12px">You need the QoreX wallet to sign. This browser doesn't have it.</p>
+      <ol style="margin:0 0 12px;padding-left:20px;line-height:1.6">
+        <li>Tap <b>Copy link</b>.</li>
+        <li>Open the <b>QoreX</b> app (testnet) and go to its <b>Browser</b>.</li>
+        <li>Paste the link and open it.</li>
+      </ol>
+      <button type="button" id="copyLink">Copy link</button>
+      <input type="text" readonly id="linkText" aria-label="Page link" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--muted);font:13px ui-monospace,monospace">`;
+    const main = document.querySelector("main");
+    main.insertBefore(card, main.children[2] || null);
+    const text = card.querySelector("#linkText");
+    text.value = location.href;
+    card.querySelector("#copyLink").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+      } catch {
+        text.select();
+        document.execCommand?.("copy");
+      }
+      card.querySelector("#copyLink").textContent = "Copied: now paste it in QoreX";
+    };
+    return false;
+  }
+
+  return { wallet, address, sign, post, guide };
 })();

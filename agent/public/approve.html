@@ -62,7 +62,10 @@
     $("expiry").textContent = `Valid until ${new Date(request.expiresAt * 1000).toLocaleString()}`;
     if (request.status === "done") say("Already done.", "ok");
     else if (request.status !== "pending") say(`This request is ${request.status}. Ask the bot again.`, "bad");
-    else $("sign").disabled = false;
+    else {
+      $("sign").disabled = false;
+      QoreXSign.guide();
+    }
   }
 
   $("sign").addEventListener("click", async () => {

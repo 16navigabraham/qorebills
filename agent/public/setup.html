@@ -297,6 +297,7 @@
     // Start with two demo billers so a first try needs no addresses at all.
     if (demoBillers.length >= 2) { addBiller(0); addBiller(1); } else addBiller();
     validate();
+    QoreXSign.guide();
   })().catch(() => say("Could not load this setup.", "bad"));
 })();
 </script>

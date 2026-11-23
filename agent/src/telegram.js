@@ -19,7 +19,11 @@ export function createTelegram({ token, fetchImpl = fetch, log = console }) {
 
   async function send(chatId, { text, link }) {
     const body = { chat_id: chatId, text: text.slice(0, 4000), link_preview_options: { is_disabled: true } };
-    if (link) body.reply_markup = { inline_keyboard: [[{ text: link.label, url: link.url }]] };
+    if (link) {
+      body.reply_markup = { inline_keyboard: [[{ text: link.label, url: link.url }]] };
+      // Also as text, so it can be copied and pasted into the QoreX browser.
+      body.text = `${body.text}\n\nLink (open it in the QoreX browser):\n${link.url}`.slice(0, 4000);
+    }
     return call("sendMessage", body);
   }
 
