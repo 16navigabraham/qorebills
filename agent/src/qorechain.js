@@ -33,8 +33,20 @@ export function loadOrCreateMnemonic(file) {
   return { mnemonic, created: true };
 }
 
-export async function createQoreAccount({ mnemonic, rest, rpc, chainId, fetchImpl = fetch }) {
-  const account = await deriveUnifiedAccount(mnemonic);
+/** Serialise async work on one account: its Cosmos sequence is also its EVM nonce. */
+export function createLock() {
+  let tail = Promise.resolve();
+  return (fn) => {
+    const run = tail.then(fn, fn);
+    tail = run.catch(() => {});
+    return run;
+  };
+}
+
+/** index 0 is the agent's main key; index n is the agent key of the n-th user. */
+export async function createQoreAccount({ mnemonic, index = 0, rest, rpc, chainId, fetchImpl = fetch }) {
+  const account = await deriveUnifiedAccount(mnemonic, index);
+  const lock = createLock();
   const base = rest.replace(/\/+$/, "");
   const getJson = async (route) => {
     const r = await fetchImpl(`${base}${route}`, { signal: AbortSignal.timeout(20_000) });
@@ -65,6 +77,8 @@ export async function createQoreAccount({ mnemonic, rest, rpc, chainId, fetchImp
     address: account.cosmos,
     evmAddress: account.evm,
     privateKey: account.privateKey,
+    /** Run fn with this account's transactions serialised (EVM and Cosmos share one nonce). */
+    lock,
 
     /** Spendable QOR in uqor (the account exists on chain once it has received funds). */
     async balanceUqor() {
@@ -119,6 +133,20 @@ export async function createQoreAccount({ mnemonic, rest, rpc, chainId, fetchImp
       );
       const result = await broadcast(signer, messages, 400_000);
       return { txHash: result.transactionHash };
+    },
+
+    /** Send native QOR (uqor) to a qor1 address, e.g. to fund a user's agent key. */
+    async sendQor(to, uqor) {
+      const signer = new EthNativeSigner(account, { rest });
+      const transport = await StargateClient.connect(rpc);
+      try {
+        const fee = { amount: [{ denom: "uqor", amount: "60000" }], gas: "300000" };
+        const result = await signer.bankSend(transport, to, [{ denom: "uqor", amount: String(uqor) }], { chainId, ...(await authInfo()), fee });
+        if (result.code !== 0) throw new Error(`Transfer refused (code ${result.code})`);
+        return { txHash: result.transactionHash };
+      } finally {
+        transport.disconnect();
+      }
     },
 
     async closeWindow() {

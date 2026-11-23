@@ -71,7 +71,7 @@ export function createWebServer({ agent, log = console }) {
       if (parts[0] === "api" && parts[1] === "requests" && ID.test(parts[2] || "")) {
         const id = parts[2];
         if (req.method === "GET" && parts.length === 3) {
-          const request = agent.getRequest(id);
+          const request = await agent.getRequest(id);
           return request ? json(res, 200, request) : json(res, 404, { error: "Unknown request." });
         }
         if (req.method === "POST" && parts.length === 4 && parts[3] === "draft") {

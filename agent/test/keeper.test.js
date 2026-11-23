@@ -4,6 +4,7 @@ import { createKeeper } from "../src/keeper.js";
 
 const FACTORY = "0x1111111111111111111111111111111111111111";
 const ACCOUNT = "0x2222222222222222222222222222222222222222";
+const quiet = { info() {}, error() {} };
 
 function fakeQore({ balance = 20_000_000n, registered = false, window = { live: false, allowedTargets: [] } } = {}) {
   const calls = [];
@@ -11,7 +12,9 @@ function fakeQore({ balance = 20_000_000n, registered = false, window = { live: 
     calls,
     address: "qor1agent",
     evmAddress: "0xagent",
+    lock: (fn) => fn(),
     balanceUqor: async () => balance,
+    setBalance: (b) => (balance = b),
     ensureRegistered: async () => {
       calls.push("register");
       const already = registered;
@@ -27,28 +30,38 @@ function fakeQore({ balance = 20_000_000n, registered = false, window = { live: 
   };
 }
 
-const quiet = { info() {}, error() {} };
-
-test("asks the owner for gas when the agent has none", async () => {
+test("calls onLowGas and stops while the key has nothing", async () => {
   const qore = fakeQore({ balance: 0n });
-  const notes = [];
-  const keeper = createKeeper({ qore, chain: { accountAddress: null }, factoryAddress: FACTORY, notify: async (t) => notes.push(t), log: quiet });
+  const asked = [];
+  const keeper = createKeeper({ qore, targets: () => [FACTORY], onLowGas: async (b) => asked.push(b), log: quiet });
   assert.deepEqual(await keeper.run(), { ready: false, reason: "unfunded" });
-  assert.match(notes[0], /Send about 20 QOR .*\nqor1agent/);
-  await keeper.run();
-  assert.equal(notes.length, 1, "asks at most every few hours");
+  assert.deepEqual(asked, [0n]);
   assert.deepEqual(qore.calls, []);
 });
 
-test("registers the key and opens a window scoped to the factory, then widens it to the account", async () => {
+test("a top-up from onLowGas lets it carry on", async () => {
+  const qore = fakeQore({ balance: 0n });
+  const keeper = createKeeper({ qore, targets: () => [ACCOUNT], onLowGas: async () => qore.setBalance(1_000_000n), log: quiet });
+  assert.deepEqual(await keeper.run(), { ready: true });
+  assert.deepEqual(qore.calls, ["register", ["open", [ACCOUNT]]]);
+});
+
+test("waits for a target before registering or opening a window", async () => {
   const qore = fakeQore();
-  const chain = { accountAddress: null };
-  const keeper = createKeeper({ qore, chain, factoryAddress: FACTORY, notify: async () => {}, log: quiet });
+  const keeper = createKeeper({ qore, targets: () => [null], log: quiet });
+  assert.deepEqual(await keeper.run(), { ready: false, reason: "no targets" });
+  assert.deepEqual(qore.calls, []);
+});
+
+test("registers once, scopes the window to its targets and follows changes", async () => {
+  const qore = fakeQore();
+  const targets = [FACTORY];
+  const keeper = createKeeper({ qore, targets: () => targets, log: quiet });
   assert.deepEqual(await keeper.run(), { ready: true });
   assert.deepEqual(qore.calls, ["register", ["open", [FACTORY]]]);
   await keeper.run();
   assert.equal(qore.calls.filter((c) => c[0] === "open").length, 1, "no reopening while the window is fine");
-  chain.accountAddress = ACCOUNT;
+  targets.push(ACCOUNT);
   await keeper.run();
   assert.deepEqual(qore.calls.at(-1), ["open", [FACTORY, ACCOUNT]]);
 });
@@ -58,7 +71,7 @@ test("renews a window that is running out", async () => {
     registered: true,
     window: { live: true, allowedTargets: [FACTORY], remainingBlocks: "100", remainingTxs: "900", remainingValue: "9000000" },
   });
-  const keeper = createKeeper({ qore, chain: { accountAddress: null }, factoryAddress: FACTORY, notify: async () => {}, log: quiet });
+  const keeper = createKeeper({ qore, targets: () => [FACTORY], log: quiet });
   await keeper.run();
   assert.deepEqual(qore.calls.at(-1), ["open", [FACTORY]]);
 });

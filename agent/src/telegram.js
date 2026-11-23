@@ -1,6 +1,6 @@
 // A small Telegram Bot API client using long polling: the bot asks Telegram for
-// new messages, so the server needs no public webhook. Only the owner's
-// Telegram account is served; anyone else gets a refusal and nothing runs.
+// new messages, so the server needs no public webhook. Every user is served in a
+// private chat (their chat id is their user id), with a per-user rate limit.
 
 export function createTelegram({ token, fetchImpl = fetch, log = console }) {
   const base = `https://api.telegram.org/bot${token}`;
@@ -23,8 +23,16 @@ export function createTelegram({ token, fetchImpl = fetch, log = console }) {
     return call("sendMessage", body);
   }
 
-  async function poll({ ownerId, onMessage, signal }) {
+  async function poll({ onMessage, signal, perMinute = 12 }) {
     let offset = 0;
+    const recent = new Map(); // userId -> timestamps of recent messages
+    const limited = (userId) => {
+      const now = Date.now();
+      const times = (recent.get(userId) || []).filter((t) => now - t < 60_000);
+      times.push(now);
+      recent.set(userId, times);
+      return times.length > perMinute;
+    };
     while (!signal?.aborted) {
       let updates;
       try {
@@ -38,17 +46,17 @@ export function createTelegram({ token, fetchImpl = fetch, log = console }) {
       for (const update of updates) {
         offset = update.update_id + 1;
         const message = update.message;
-        if (!message?.text || message.chat?.type !== "private") continue;
-        if (String(message.from?.id) !== String(ownerId)) {
-          await send(message.chat.id, { text: "This QoreBills agent works for one owner only." }).catch(() => {});
-          continue;
-        }
-        try {
-          await send(message.chat.id, await onMessage(message.text));
-        } catch (error) {
-          log.error?.("[telegram] handling failed:", error.shortMessage || error.message);
-          await send(message.chat.id, { text: "Something went wrong talking to the chain. Try again in a moment." }).catch(() => {});
-        }
+        if (!message?.text || message.chat?.type !== "private" || !message.from?.id || message.from.is_bot) continue;
+        const userId = String(message.from.id);
+        if (limited(userId)) continue;
+        // Handle users concurrently: one user's slow payment does not hold up the others.
+        Promise.resolve()
+          .then(() => onMessage(userId, message.text))
+          .then((reply) => send(message.chat.id, reply))
+          .catch(async (error) => {
+            log.error?.("[telegram] handling failed:", error.shortMessage || error.message);
+            await send(message.chat.id, { text: "Something went wrong talking to the chain. Try again in a moment." }).catch(() => {});
+          });
       }
     }
   }

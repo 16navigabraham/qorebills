@@ -27,9 +27,18 @@ You chat with the agent ("pay my electricity, 20 fUSD"), it decides what to do, 
 | 7 | Testnet deployment, addresses below |
 | 8–9 | README, demo video, submission |
 
+## Try it
+
+1. Install the QoreX wallet (app or extension), switch it to **testnet** and register your post-quantum key there.
+2. Open [@QoreBills_bot](https://t.me/QoreBills_bot) on Telegram and send `/start`.
+3. Tap **Set up in QoreX**, add a biller (any address works on testnet), keep the default limits and sign. The agent pays the gas.
+4. Send your account some fUSD or QOR from QoreX, then try `pay 5 fUSD to <biller>`, a payment above your auto-pay limit, `status`, `pause` and `resume`.
+
+Anyone can use the bot. Each Telegram user gets their own smart account, owned by their own QoreX wallet, and their own agent key: a key derived for that user, funded by the agent, with its own registered ML-DSA-87 key and an EVM window scoped to that user's account only. One user's agent can never move another user's money, and every approval or settings change is checked on chain against the account owner's post-quantum key.
+
 ## Status
 
-Built and tested: the contracts (35 tests, `contracts/`) and the agent (17 tests, `agent/`, including an end-to-end run on a local Hardhat node). Next: the agent key's QoreChain set-up and the testnet deploy.
+Built and tested: the contracts (35 tests, `contracts/`) and the agent (27 tests, `agent/`, including end-to-end runs on a local Hardhat node with one and with two users). The factory is deployed on the testnet; the agent runs on an Oracle Cloud VM, deployed by GitHub Actions.
 
 ### How it works
 
@@ -51,7 +60,7 @@ Checked on the testnet: an ML-DSA-87 signature in that format verifies with Qore
 
 ### The agent (`agent/`)
 
-A Node.js service with a Telegram bot, [@QoreBills_bot](https://t.me/QoreBills_bot), and the QoreX signing pages. It only answers its owner's Telegram account. With a Gemini key it also understands free-form requests; the model only proposes a command, which the agent checks against the allowlist and limits before the contract checks them again.
+A Node.js service with a Telegram bot, [@QoreBills_bot](https://t.me/QoreBills_bot), and the QoreX signing pages. It creates its master key on the server on first start; key 0 submits account set-ups and funds the per-user keys, and each user key keeps its own scoped EVM window open (`src/keeper.js`). With a Gemini key it also understands free-form requests; the model only proposes a command, which the agent checks against the allowlist and limits before the contract checks them again.
 
 ```bash
 cd contracts && npm install && npm test

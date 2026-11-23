@@ -100,6 +100,10 @@ export function pqSignatureBytes(signature) {
  */
 export function createAgent({
   chain,
+  factoryChain = chain, // sends createAccount (the agent's main key pays the gas)
+  requests = new Map(), // shared by all users so the web pages can find any request by id
+  userId = null,
+  canStartSetup = async () => null, // returns a reason to refuse, or null
   tokens,
   cosmosChainId,
   publicUrl,
@@ -117,7 +121,6 @@ export function createAgent({
   const tokenByAddress = (a) => tokens.find((t) => t.address.toLowerCase() === String(a).toLowerCase());
   const fmtToken = (token) => (v) => `${formatUnits(BigInt(v), token.decimals)} ${token.symbol}`;
   const nowSeconds = () => Math.floor(now() / 1000);
-  const requests = new Map();
   let pendingId = null; // the one request bound to the account's current nonce
 
   const saved = state.get();
@@ -142,7 +145,7 @@ export function createAgent({
 
   function newRequest(fields) {
     const id = crypto.randomBytes(16).toString("hex");
-    const request = { id, status: "pending", ...fields };
+    const request = { id, userId, status: "pending", ...fields };
     requests.set(id, request);
     if (request.nonce !== undefined) {
       if (pendingId && requests.get(pendingId)?.status === "pending") requests.get(pendingId).status = "replaced";
@@ -164,7 +167,9 @@ export function createAgent({
 
   // ---------------------------------------------------------------- setup
 
-  function startSetup() {
+  async function startSetup() {
+    const refusal = await canStartSetup();
+    if (refusal) return { text: refusal };
     const request = newRequest({ kind: "setup", status: "draft", deadline: nowSeconds() + requestMinutes * 60 });
     return {
       text: [
@@ -222,7 +227,7 @@ export function createAgent({
       const ownerAddress = evmAddress(owner);
       const config = setupConfig(form);
       const setupId = toHex(crypto.randomBytes(16));
-      const message = await chain.setupMessage({ owner: ownerAddress, config, setupId, deadline: r.deadline });
+      const message = await factoryChain.setupMessage({ owner: ownerAddress, config, setupId, deadline: r.deadline });
       Object.assign(r, {
         status: "pending",
         owner: ownerAddress,
@@ -471,13 +476,16 @@ export function createAgent({
     try {
       let hash;
       if (r.kind === "setup") {
-        const created = await chain.createAccount({ owner: r.owner, config: r.config, setupId: r.setupId, deadline: r.deadline, signature: bytes });
+        const created = await factoryChain.createAccount({ owner: r.owner, config: r.config, setupId: r.setupId, deadline: r.deadline, signature: bytes });
         hash = created.hash;
         chain.useAccount(created.account);
         state.set({ account: created.account, owner: r.owner });
         // e.g. widen the agent's scoped EVM window to the new account before reporting success
-        await onAccountReady(created.account).catch((error) => log.error?.("[agent] account follow-up failed:", error.message));
-        r.doneText = `Your bill account is ready: ${created.account}\nSend fUSD or QOR to it from QoreX, then ask me to pay a bill. Send “status” to see your limits.`;
+        const note = await onAccountReady(created.account).catch((error) => {
+          log.error?.("[agent] account follow-up failed:", error.message);
+          return "I could not finish getting my own key ready yet; I will retry.";
+        });
+        r.doneText = `Your bill account is ready: ${created.account}\nSend fUSD or QOR to it from QoreX, then ask me to pay a bill. Send “status” to see your limits.${note ? `\n\n${note}` : ""}`;
       } else {
         ({ hash } = await r.run(bytes));
       }
@@ -505,8 +513,17 @@ export function createAgent({
     const cmd = await parse(text);
     if (cmd.kind === "setup") return startSetup();
     if (!chain.accountAddress) {
-      const setup = startSetup();
-      return { ...setup, text: `Welcome to QoreBills.\n\n${setup.text}` };
+      const setup = await startSetup();
+      if (!setup.link) return setup;
+      return {
+        ...setup,
+        text: [
+          "Welcome to QoreBills: an AI agent that pays your bills from a smart account, inside limits enforced on QoreChain.",
+          "Big payments and every settings change need your post-quantum (ML-DSA-87) signature from the QoreX wallet.",
+          "",
+          setup.text,
+        ].join("\n"),
+      };
     }
     try {
       switch (cmd.kind) {

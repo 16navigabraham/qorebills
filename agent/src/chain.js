@@ -36,7 +36,7 @@ function refusalFrom(error) {
   return null;
 }
 
-export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAddress, accountAddress = null }) {
+export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAddress, accountAddress = null, lock = (fn) => fn() }) {
   const chain = defineChain({
     id: evmChainId,
     name: "QoreChain",
@@ -60,7 +60,7 @@ export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAdd
   // about 5M gas, below what createAccount needs, so the agent never relies on estimates.
   const GAS = { pay: 400_000n, payWithApproval: 1_000_000n, executeSigned: 1_000_000n, createAccount: 7_500_000n };
 
-  async function send(target, functionName, args) {
+  async function sendNow(target, functionName, args) {
     const gas = GAS[functionName];
     let request;
     try {
@@ -77,6 +77,9 @@ export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAdd
     if (receipt.status !== "success") throw new Error(`Transaction ${hash} reverted.`);
     return { hash, receipt };
   }
+
+  // Transactions from one key go one at a time: its EVM nonce is also its Cosmos sequence.
+  const send = (target, functionName, args) => lock(() => sendNow(target, functionName, args));
 
   return {
     agentAddress: agent.address,

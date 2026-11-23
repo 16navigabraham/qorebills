@@ -4,7 +4,7 @@ name: Deploy
 # Repository secrets (Settings > Secrets and variables > Actions > Secrets):
 #   DEPLOY_SSH_KEY      the same deploy key as the claude-tools repository
 #   TELEGRAM_BOT_TOKEN  from @BotFather
-#   OWNER_TELEGRAM_ID   your numeric Telegram user id
+#   ADMIN_TELEGRAM_ID   optional: your numeric Telegram id, for "the agent needs gas" messages
 #   GEMINI_API_KEY      optional, for free-form requests
 # The rest is not secret and lives below.
 
@@ -44,11 +44,10 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          OWNER_TELEGRAM_ID: ${{ secrets.OWNER_TELEGRAM_ID }}
         run: |
           # Until everything is configured, skip the deploy with a notice instead of failing.
           missing=""
-          for name in SSH_KEY TELEGRAM_BOT_TOKEN OWNER_TELEGRAM_ID; do
+          for name in SSH_KEY TELEGRAM_BOT_TOKEN; do
             [ -n "${!name}" ] || missing="$missing secret:${name/SSH_KEY/DEPLOY_SSH_KEY}"
           done
           [ -n "$FACTORY_ADDRESS" ] || missing="$missing FACTORY_ADDRESS"
@@ -74,7 +73,7 @@ jobs:
         env:
           SHA: ${{ github.sha }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          OWNER_TELEGRAM_ID: ${{ secrets.OWNER_TELEGRAM_ID }}
+          ADMIN_TELEGRAM_ID: ${{ secrets.ADMIN_TELEGRAM_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           ssh_vm() { ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes "$SERVER_USER@$SERVER_IP" "$@"; }
@@ -82,7 +81,7 @@ jobs:
           # .env is written over SSH from the secrets, so they never sit in the repository or the logs.
           {
             printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
-            printf 'OWNER_TELEGRAM_ID=%s\n' "$OWNER_TELEGRAM_ID"
+            printf 'ADMIN_TELEGRAM_ID=%s\n' "$ADMIN_TELEGRAM_ID"
             printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY"
             printf 'FACTORY_ADDRESS=%s\n' "$FACTORY_ADDRESS"
             printf 'PUBLIC_URL=%s\n' "$PUBLIC_URL"

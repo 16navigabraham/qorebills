@@ -14,22 +14,22 @@ function required(env, name) {
 
 export function loadConfig(env = process.env) {
   const tokens = env.TOKENS ? JSON.parse(env.TOKENS) : DEFAULT_TOKENS;
-  const ownerTelegramId = required(env, "OWNER_TELEGRAM_ID");
-  if (!/^\d+$/.test(ownerTelegramId)) throw new Error("OWNER_TELEGRAM_ID must be your numeric Telegram user id.");
+  // Optional: the operator's Telegram id, told when the agent's main key needs gas.
+  const adminTelegramId = (env.ADMIN_TELEGRAM_ID || env.OWNER_TELEGRAM_ID || "").trim() || null;
+  if (adminTelegramId && !/^\d+$/.test(adminTelegramId)) throw new Error("ADMIN_TELEGRAM_ID must be a numeric Telegram user id.");
   return {
     evmRpcUrl: env.QORE_EVM_RPC || "https://evm-testnet.qore.host",
     restUrl: env.QORE_REST || "https://api-testnet.qore.host",
     evmChainId: Number(env.EVM_CHAIN_ID || 9800),
     cosmosChainId: env.COSMOS_CHAIN_ID || "qorechain-diana",
     factoryAddress: getAddress(required(env, "FACTORY_ADDRESS")),
-    // Optional: normally the account is created through the setup page and remembered in STATE_FILE.
-    accountAddress: env.ACCOUNT_ADDRESS ? getAddress(env.ACCOUNT_ADDRESS) : null,
     stateFile: env.STATE_FILE || "data/state.json",
     rpcUrl: env.QORE_RPC || "https://rpc-testnet.qore.host",
     // The agent's own key: created on first start and kept in this file (mode 600).
     agentKeyFile: env.AGENT_KEY_FILE || "data/agent.mnemonic",
     telegramToken: required(env, "TELEGRAM_BOT_TOKEN"),
-    ownerTelegramId,
+    adminTelegramId,
+    maxUsers: Number(env.MAX_USERS || 50),
     publicUrl: required(env, "PUBLIC_URL").replace(/\/+$/, ""),
     port: Number(env.PORT || 8787),
     geminiApiKey: env.GEMINI_API_KEY?.trim() || null,
