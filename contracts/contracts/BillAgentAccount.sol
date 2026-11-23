@@ -5,7 +5,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {IQorePQC} from "./interfaces/IQorePQC.sol";
+import {OwnerSigned} from "./OwnerSigned.sol";
+import {AccountConfig, ActionKind, OwnerAction} from "./BillTypes.sol";
 
 /// @title BillAgentAccount
 /// @notice A smart account that holds an owner's bill money and lets one AI agent key
@@ -16,20 +17,18 @@ import {IQorePQC} from "./interfaces/IQorePQC.sol";
 ///   - duration limit: the agent key stops working at its expiry time;
 ///   - payments above the auto-pay limit need the owner's post-quantum (ML-DSA-87)
 ///     signature, checked on chain against the key the owner registered with QoreChain.
+/// The owner changes settings either with a transaction or with a signed message that
+/// anyone (normally the agent) can submit, so the owner never needs gas or an EVM window.
 /// Native QOR is token address(0). Every bill reference can be paid once.
-contract BillAgentAccount is ReentrancyGuard {
+contract BillAgentAccount is OwnerSigned, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Strings for uint256;
     using Strings for address;
 
-    IQorePQC internal constant PQC_VERIFY = IQorePQC(0x0000000000000000000000000000000000000a01);
-    IQorePQC internal constant PQC_KEY_STATUS = IQorePQC(0x0000000000000000000000000000000000000a02);
-    uint8 internal constant ML_DSA_87 = 1;
-
     struct TokenLimits {
-        uint128 autoPayLimit; // the agent pays up to this alone; above it needs approval
-        uint128 maxPerPayment; // hard cap for one payment, even with approval
-        uint128 dailyCap; // hard cap per UTC day, approved payments included
+        uint128 autoPayLimit;
+        uint128 maxPerPayment;
+        uint128 dailyCap;
         bool enabled;
     }
 
@@ -46,8 +45,9 @@ contract BillAgentAccount is ReentrancyGuard {
     uint64 public agentExpiry;
     uint32 public maxPaymentsPerDay;
     bool public paused;
-    /// @notice Next owner-approval nonce. Each approval can be used once, in order.
-    uint256 public approvalNonce;
+    /// @notice Next nonce for the owner's signed messages (payment approvals and settings).
+    /// Each signed message can be used once, in order.
+    uint256 public nonce;
 
     mapping(address token => TokenLimits) public limits;
     mapping(address biller => Biller) internal _billers;
@@ -62,6 +62,7 @@ contract BillAgentAccount is ReentrancyGuard {
     event LimitsSet(address indexed token, uint128 autoPayLimit, uint128 maxPerPayment, uint128 dailyCap, bool enabled);
     event MaxPaymentsPerDaySet(uint32 maxPaymentsPerDay);
     event PausedSet(bool paused);
+    event OwnerSignedAction(ActionKind indexed kind, uint256 nonce);
     event BillPaid(
         address indexed biller, address indexed token, uint256 amount, bytes32 indexed ref, bool ownerApproved
     );
@@ -74,14 +75,12 @@ contract BillAgentAccount is ReentrancyGuard {
     error BillerNotAllowed(address biller);
     error TokenNotEnabled(address token);
     error ZeroAmount();
+    error ZeroAddress();
     error RefAlreadyPaid(bytes32 ref);
     error AboveMaxPerPayment(uint256 amount, uint256 max);
     error NeedsOwnerApproval(uint256 amount, uint256 autoPayLimit);
     error DailyCapExceeded(uint256 wouldSpend, uint256 cap);
     error DailyPaymentCountExceeded(uint256 max);
-    error ApprovalExpired();
-    error OwnerPqcKeyMissing();
-    error InvalidOwnerSignature();
     error InvalidLimits();
     error NativeTransferFailed();
 
@@ -90,54 +89,46 @@ contract BillAgentAccount is ReentrancyGuard {
         _;
     }
 
-    constructor(address owner_, string memory cosmosChainId_) {
+    constructor(address owner_, string memory cosmosChainId_, AccountConfig memory config) {
+        if (owner_ == address(0)) revert ZeroAddress();
         owner = owner_;
         cosmosChainId = cosmosChainId_;
+        _setAgent(config.agent, config.agentExpiry);
+        _setMaxPaymentsPerDay(config.maxPaymentsPerDay);
+        for (uint256 i; i < config.tokens.length; i++) {
+            _setLimits(
+                config.tokens[i].token,
+                config.tokens[i].autoPayLimit,
+                config.tokens[i].maxPerPayment,
+                config.tokens[i].dailyCap,
+                true
+            );
+        }
+        for (uint256 i; i < config.billers.length; i++) {
+            _setBiller(config.billers[i].biller, true, config.billers[i].name);
+        }
     }
 
     receive() external payable {}
 
     // ---------------------------------------------------------------- owner
 
-    /// @notice Set (or replace) the agent key and when it stops working. expiry 0 revokes it.
-    function setAgent(address agent_, uint64 expiry) external onlyOwner {
-        agent = agent_;
-        agentExpiry = expiry;
-        emit AgentSet(agent_, expiry);
+    /// @notice Change a setting with a transaction from the owner.
+    function execute(OwnerAction calldata action) external onlyOwner nonReentrant {
+        _apply(action);
     }
 
-    function setBiller(address biller, bool allowed, string calldata name) external onlyOwner {
-        _billers[biller] = Biller(allowed, name);
-        if (!_listed[biller]) {
-            _listed[biller] = true;
-            _billerList.push(biller);
-        }
-        emit BillerSet(biller, allowed, name);
-    }
-
-    function setLimits(address token, uint128 autoPayLimit, uint128 maxPerPayment, uint128 dailyCap, bool enabled)
+    /// @notice Change a setting with the owner's ML-DSA-87 signature over
+    /// actionMessage(action, deadline, nonce). Anyone can submit it.
+    function executeSigned(OwnerAction calldata action, uint64 deadline, bytes calldata pqSignature)
         external
-        onlyOwner
+        nonReentrant
     {
-        if (autoPayLimit > maxPerPayment || maxPerPayment > dailyCap) revert InvalidLimits();
-        limits[token] = TokenLimits(autoPayLimit, maxPerPayment, dailyCap, enabled);
-        emit LimitsSet(token, autoPayLimit, maxPerPayment, dailyCap, enabled);
-    }
-
-    function setMaxPaymentsPerDay(uint32 max) external onlyOwner {
-        maxPaymentsPerDay = max;
-        emit MaxPaymentsPerDaySet(max);
-    }
-
-    function setPaused(bool paused_) external onlyOwner {
-        paused = paused_;
-        emit PausedSet(paused_);
-    }
-
-    /// @notice The owner can always take the money back, whatever the agent's limits.
-    function withdraw(address token, address to, uint256 amount) external onlyOwner nonReentrant {
-        _transfer(token, to, amount);
-        emit Withdrawn(token, to, amount);
+        uint256 n = nonce;
+        _verifyOwner(owner, cosmosChainId, actionMessage(action, deadline, n), deadline, pqSignature);
+        nonce = n + 1;
+        emit OwnerSignedAction(action.kind, n);
+        _apply(action);
     }
 
     // ---------------------------------------------------------------- agent
@@ -151,7 +142,6 @@ contract BillAgentAccount is ReentrancyGuard {
 
     /// @notice Pay a bill above the auto-pay limit with the owner's ML-DSA-87 signature over
     /// approvalMessage(...), made with the owner's QoreChain wallet (message signing v1).
-    /// The signature is checked on chain against the owner's registered PQC key.
     function payWithApproval(
         address biller,
         address token,
@@ -161,67 +151,78 @@ contract BillAgentAccount is ReentrancyGuard {
         bytes calldata pqSignature
     ) external nonReentrant {
         _checkPayment(biller, token, amount, ref);
-        if (block.timestamp > deadline) revert ApprovalExpired();
-
-        (bool registered, uint8 algorithmId, bytes memory pubkey, bool possessionProven) =
-            PQC_KEY_STATUS.pqcKeyStatus(owner);
-        if (!registered || algorithmId != ML_DSA_87 || !possessionProven || pubkey.length == 0) {
-            revert OwnerPqcKeyMissing();
-        }
-
-        uint256 nonce = approvalNonce;
-        bytes memory signed = abi.encodePacked(
-            "qorechain-msg-v1|", cosmosChainId, "|", approvalMessage(biller, token, amount, ref, deadline, nonce)
-        );
-        if (!PQC_VERIFY.pqcVerify(pubkey, pqSignature, signed)) revert InvalidOwnerSignature();
-        approvalNonce = nonce + 1;
-
+        uint256 n = nonce;
+        _verifyOwner(owner, cosmosChainId, approvalMessage(biller, token, amount, ref, deadline, n), deadline, pqSignature);
+        nonce = n + 1;
         _settle(biller, token, amount, ref, true);
     }
 
-    // ---------------------------------------------------------------- views
+    // ---------------------------------------------------------------- signed text
 
     /// @notice The text the owner signs to approve one payment. The wallet shows it as is.
-    function approvalMessage(
-        address biller,
-        address token,
-        uint256 amount,
-        bytes32 ref,
-        uint64 deadline,
-        uint256 nonce
-    ) public view returns (bytes memory) {
-        bytes memory head = abi.encodePacked(
-            "QoreBills payment approval\naccount: ",
-            address(this).toHexString(),
-            "\nevm chain: ",
-            block.chainid.toString(),
-            "\nbiller: ",
-            biller.toHexString(),
-            " (",
-            _billers[biller].name,
-            ")"
-        );
-        return abi.encodePacked(head, _approvalTail(token, amount, ref, deadline, nonce));
-    }
-
-    function _approvalTail(address token, uint256 amount, bytes32 ref, uint64 deadline, uint256 nonce)
-        internal
-        pure
+    function approvalMessage(address biller, address token, uint256 amount, bytes32 ref, uint64 deadline, uint256 n)
+        public
+        view
         returns (bytes memory)
     {
         return abi.encodePacked(
+            "QoreBills payment approval\nbiller: ",
+            _billers[biller].name,
+            " ",
+            biller.toHexString(),
+            "\namount: ",
+            _amountText(token, amount),
             "\ntoken: ",
             token.toHexString(),
-            "\namount: ",
-            amount.toString(),
             "\nref: ",
             uint256(ref).toHexString(32),
+            _footer(deadline, n)
+        );
+    }
+
+    /// @notice The text the owner signs to change a setting.
+    function actionMessage(OwnerAction calldata action, uint64 deadline, uint256 n)
+        public
+        view
+        returns (bytes memory)
+    {
+        return abi.encodePacked("QoreBills settings change\n", _actionText(action), _footer(deadline, n));
+    }
+
+    function _actionText(OwnerAction calldata x) internal view returns (string memory) {
+        ActionKind k = x.kind;
+        if (k == ActionKind.SetBiller) return string.concat("allow biller: ", x.name, " ", x.target.toHexString());
+        if (k == ActionKind.RemoveBiller) {
+            return string.concat("remove biller: ", _billers[x.target].name, " ", x.target.toHexString());
+        }
+        if (k == ActionKind.SetLimits) {
+            return string.concat("set limits for ", x.token.toHexString(), _limitsText(x.token, x.a, x.b, x.c));
+        }
+        if (k == ActionKind.DisableToken) return string.concat("stop payments in ", x.token.toHexString());
+        if (k == ActionKind.SetAgent) {
+            if (x.target == address(0)) return "revoke the agent";
+            return string.concat("agent: ", x.target.toHexString(), "\nagent expires: ", uint256(x.a).toString());
+        }
+        if (k == ActionKind.SetMaxPaymentsPerDay) return string.concat("payments per day: ", uint256(x.a).toString());
+        if (k == ActionKind.Pause) return "pause all payments";
+        if (k == ActionKind.Unpause) return "resume payments";
+        return string.concat("withdraw: ", _amountText(x.token, x.a), "\nto: ", x.target.toHexString());
+    }
+
+    function _footer(uint64 deadline, uint256 n) internal view returns (string memory) {
+        return string.concat(
+            "\naccount: ",
+            address(this).toHexString(),
+            "\nevm chain: ",
+            block.chainid.toString(),
             "\nvalid until: ",
             uint256(deadline).toString(),
             "\nnonce: ",
-            nonce.toString()
+            n.toString()
         );
     }
+
+    // ---------------------------------------------------------------- views
 
     function billerInfo(address biller_) external view returns (bool allowed, string memory name) {
         Biller storage b = _billers[biller_];
@@ -249,6 +250,58 @@ contract BillAgentAccount is ReentrancyGuard {
     }
 
     // ---------------------------------------------------------------- internal
+
+    function _apply(OwnerAction calldata x) internal {
+        ActionKind k = x.kind;
+        if (k == ActionKind.SetBiller) {
+            _setBiller(x.target, true, x.name);
+        } else if (k == ActionKind.RemoveBiller) {
+            _setBiller(x.target, false, _billers[x.target].name);
+        } else if (k == ActionKind.SetLimits) {
+            _setLimits(x.token, x.a, x.b, x.c, true);
+        } else if (k == ActionKind.DisableToken) {
+            _setLimits(x.token, 0, 0, 0, false);
+        } else if (k == ActionKind.SetAgent) {
+            _setAgent(x.target, uint64(x.a));
+        } else if (k == ActionKind.SetMaxPaymentsPerDay) {
+            _setMaxPaymentsPerDay(uint32(x.a));
+        } else if (k == ActionKind.Pause || k == ActionKind.Unpause) {
+            paused = k == ActionKind.Pause;
+            emit PausedSet(paused);
+        } else {
+            if (x.target == address(0)) revert ZeroAddress();
+            _transfer(x.token, x.target, x.a);
+            emit Withdrawn(x.token, x.target, x.a);
+        }
+    }
+
+    function _setAgent(address agent_, uint64 expiry) internal {
+        agent = agent_;
+        agentExpiry = agent_ == address(0) ? 0 : expiry;
+        emit AgentSet(agent_, agentExpiry);
+    }
+
+    function _setBiller(address biller_, bool allowed, string memory name) internal {
+        if (biller_ == address(0)) revert ZeroAddress();
+        _checkName(name);
+        _billers[biller_] = Biller(allowed, name);
+        if (!_listed[biller_]) {
+            _listed[biller_] = true;
+            _billerList.push(biller_);
+        }
+        emit BillerSet(biller_, allowed, name);
+    }
+
+    function _setLimits(address token, uint128 autoPay, uint128 maxPer, uint128 daily, bool enabled) internal {
+        if (enabled && (autoPay > maxPer || maxPer > daily || daily == 0)) revert InvalidLimits();
+        limits[token] = TokenLimits(autoPay, maxPer, daily, enabled);
+        emit LimitsSet(token, autoPay, maxPer, daily, enabled);
+    }
+
+    function _setMaxPaymentsPerDay(uint32 max) internal {
+        maxPaymentsPerDay = max;
+        emit MaxPaymentsPerDaySet(max);
+    }
 
     function _checkPayment(address biller_, address token, uint256 amount, bytes32 ref)
         internal
