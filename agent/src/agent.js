@@ -177,7 +177,7 @@ export function createAgent({
       return await parseWithLlm(text, { billers: await chain.billers(), tokens });
     } catch (error) {
       log.warn?.("[agent] LLM parse failed:", error.message);
-      return { kind: "unknown" };
+      return { kind: "llm_unavailable" };
     }
   }
 
@@ -682,6 +682,8 @@ export function createAgent({
           return listSchedules();
         case "stop_schedule":
           return stopSchedule(cmd.id);
+        case "llm_unavailable":
+          return { text: "My AI helper is busy right now, so I couldn't read that. Try again in a moment, or use a command like “pay 15 fUSD to electricity” (send “help” for the list)." };
         case "pay_help":
           return { text: "Say it like: pay 15 fUSD to IBEDC electricity" };
         case "settings_help":

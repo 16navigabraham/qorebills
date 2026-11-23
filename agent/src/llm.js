@@ -19,7 +19,34 @@ const SCHEMA = {
   required: ["kind"],
 };
 
-export function createLlmParser({ apiKey, model, fetchImpl = fetch }) {
+// Gemini sometimes answers "busy" (503), "slow down" (429) or a 5xx; those are worth retrying.
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+
+export class LlmUnavailable extends Error {}
+
+export function createLlmParser({ apiKey, model, fetchImpl = fetch, attempts = 3, backoffMs = 800, timeoutMs = 12_000 }) {
+  async function generate(url, body) {
+    let last;
+    for (let i = 0; i < attempts; i++) {
+      if (i) await new Promise((r) => setTimeout(r, backoffMs * 2 ** (i - 1))); // 0.8 s, then 1.6 s
+      try {
+        const response = await fetchImpl(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+          body,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (response.ok) return response.json();
+        last = new Error(`Gemini answered ${response.status}`);
+        if (!RETRY_STATUS.has(response.status)) throw new LlmUnavailable(last.message); // e.g. a bad key or model: no retry
+      } catch (error) {
+        if (error instanceof LlmUnavailable) throw error;
+        last = error; // network error or timeout: retry
+      }
+    }
+    throw new LlmUnavailable(`${last?.message || "Gemini failed"} (after ${attempts} attempts)`);
+  }
+
   return async function parseWithLlm(text, { billers, tokens }) {
     const prompt = [
       "You turn a bill-payment request into a command for a payment agent.",
@@ -31,17 +58,13 @@ export function createLlmParser({ apiKey, model, fetchImpl = fetch }) {
       `Request: ${JSON.stringify(String(text).slice(0, 500))}`,
     ].join("\n");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    const response = await fetchImpl(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
+    const data = await generate(
+      url,
+      JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA },
       }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) throw new Error(`Gemini answered ${response.status}`);
-    const data = await response.json();
+    );
     const out = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
     if (out.kind !== "pay" && out.kind !== "schedule") return { kind: out.kind || "unknown" };
     if (!/^\d+(\.\d+)?$/.test(out.amount || "") || !out.billerQuery) return { kind: "pay_help" };
