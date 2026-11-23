@@ -20,7 +20,10 @@
   label { display: block; font-size: .9rem; color: var(--muted); }
   input[type=text], input[type=number] { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font: inherit; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .row { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+  .biller { margin-bottom: 12px; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+  .custom { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 8px; }
+  select { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font: inherit; }
   .row button { padding: 10px 12px; background: transparent; color: var(--muted); border: 1px solid var(--line); width: auto; }
   .toggle { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-weight: 600; color: var(--text); font-size: 1rem; }
   button { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
@@ -32,8 +35,8 @@
   [hidden] { display: none !important; }
   @media (max-width: 420px) {
     .grid { grid-template-columns: 1fr; }
-    .row { grid-template-columns: 1fr; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-    .row button { justify-self: end; padding: 4px 8px; border: 0; }
+    .custom { grid-template-columns: 1fr; }
+    .biller { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
   }
 </style>
 </head>
@@ -47,7 +50,7 @@
       <h2>Billers</h2>
       <div id="billers"></div>
       <button type="button" class="ghost" id="addBiller">+ Add biller</button>
-      <p class="hint">The agent can only ever pay these addresses (0x… or qor1…).</p>
+      <p class="hint">The agent can only ever pay these billers. The demo billers are test addresses run by QoreBills; choose "Other address…" for your own (0x… or qor1…).</p>
     </div>
 
     <div class="card" id="limits"></div>
@@ -74,7 +77,8 @@
   const id = location.pathname.split("/").pop();
   const $ = (x) => document.getElementById(x);
   const say = (text, cls = "") => { $("status").className = cls; $("status").textContent = text; };
-  const DEFAULTS = { fUSD: ["20", "100", "150", true], QOR: ["1", "2", "5", false] };
+  // Both on by default: faucet QOR works straight away; fUSD needs converting to its ERC-20 form first.
+  const DEFAULTS = { fUSD: ["20", "100", "150", true], QOR: ["1", "2", "5", true] };
   let request = null;
 
   function input(labelText, value, attrs = {}) {
@@ -86,17 +90,42 @@
     return { label, el };
   }
 
-  function addBiller(name = "", address = "") {
+  let demoBillers = [];
+
+  // One biller: pick a demo biller from the list, or choose "Other address…" to type one.
+  function addBiller(preset = "") {
     const row = document.createElement("div");
-    row.className = "row";
-    const n = input("Name", name, { placeholder: "IBEDC electricity", maxLength: 40, required: true });
-    const a = input("Address", address, { placeholder: "0x… or qor1…", required: true });
+    row.className = "biller";
+    const top = document.createElement("div");
+    top.className = "row";
+    const label = document.createElement("label");
+    label.textContent = "Biller";
+    const select = document.createElement("select");
+    for (const [i, b] of demoBillers.entries()) select.add(new Option(b.name, String(i)));
+    select.add(new Option("Other address…", "other"));
+    select.value = preset === "" ? "other" : String(preset);
+    label.appendChild(select);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Remove";
     remove.setAttribute("aria-label", "Remove biller");
     remove.onclick = () => row.remove();
-    row.append(n.label, a.label, remove);
+    top.append(label, remove);
+    const custom = document.createElement("div");
+    custom.className = "custom";
+    const n = input("Name", "", { placeholder: "Campus hostel", maxLength: 40 });
+    const a = input("Address", "", { placeholder: "0x… or qor1…" });
+    n.el.dataset.role = "name";
+    a.el.dataset.role = "address";
+    custom.append(n.label, a.label);
+    const sync = () => {
+      const other = select.value === "other";
+      custom.hidden = !other;
+      n.el.required = a.el.required = other;
+    };
+    select.onchange = sync;
+    sync();
+    row.append(top, custom);
     $("billers").appendChild(row);
   }
 
@@ -129,9 +158,13 @@
   }
 
   function readForm() {
-    const billers = [...$("billers").querySelectorAll(".row")].map((row) => {
-      const [name, address] = row.querySelectorAll("input");
-      return { name: name.value.trim(), address: address.value.trim() };
+    const billers = [...$("billers").querySelectorAll(".biller")].map((row) => {
+      const choice = row.querySelector("select").value;
+      if (choice !== "other") return { ...demoBillers[Number(choice)] };
+      return {
+        name: row.querySelector('[data-role="name"]').value.trim(),
+        address: row.querySelector('[data-role="address"]').value.trim(),
+      };
     });
     const limits = {};
     for (const box of $("limits").querySelectorAll("input[type=checkbox]")) {
@@ -173,8 +206,10 @@
     if (request.kind !== "setup") { $("form").hidden = true; return say("This is not a setup link.", "bad"); }
     if (request.status === "done") { $("form").hidden = true; return say("This setup is done. Go back to Telegram.", "ok"); }
     if (!["draft", "pending"].includes(request.status)) { $("form").hidden = true; return say(`This setup is ${request.status}. Send “setup” to the bot.`, "bad"); }
+    demoBillers = request.demoBillers || [];
     renderLimits(request.tokens);
-    addBiller();
+    // Start with two demo billers so a first try needs no addresses at all.
+    if (demoBillers.length >= 2) { addBiller(0); addBiller(1); } else addBiller();
   })().catch(() => say("Could not load this setup.", "bad"));
 })();
 </script>

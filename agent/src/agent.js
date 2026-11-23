@@ -105,6 +105,7 @@ export function createAgent({
   userId = null,
   canStartSetup = async () => null, // returns a reason to refuse, or null
   tokens,
+  demoBillers = [], // [{ name, address }] offered on the setup page
   cosmosChainId,
   publicUrl,
   addresses,
@@ -453,7 +454,7 @@ export function createAgent({
       expiresAt: r.deadline,
       txHash: r.txHash || null,
       error: r.error || null,
-      ...(r.kind === "setup" ? { tokens: tokens.map((t) => t.symbol) } : {}),
+      ...(r.kind === "setup" ? { tokens: tokens.map((t) => t.symbol), demoBillers } : {}),
     };
   }
 

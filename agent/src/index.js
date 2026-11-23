@@ -1,4 +1,4 @@
-import { bech32ToHex, evmToQor } from "@qorechain/sdk";
+import { bech32ToHex, deriveUnifiedAccount, evmToQor } from "@qorechain/sdk";
 import { createBot } from "./bot.js";
 import { createChain } from "./chain.js";
 import { loadConfig } from "./config.js";
@@ -28,6 +28,15 @@ const keyFor = async (index) => {
   return { qore, chain };
 };
 const main = await keyFor(0);
+
+// Demo billers for the setup page: addresses derived from the master key far above the user
+// indexes, so test payments land in addresses this agent controls instead of being lost.
+const DEMO_BILLERS = ["Electricity", "Water", "Internet data", "TV subscription", "Hostel rent", "School fees"];
+const demoBillers = [];
+for (const [i, name] of DEMO_BILLERS.entries()) {
+  const { evm } = await deriveUnifiedAccount(mnemonic, 1_000_000 + i);
+  demoBillers.push({ name: `${name} (demo)`, address: evm });
+}
 log.info(`[qorebills] main key ${main.qore.address} (${main.qore.evmAddress})${created ? ", new master key created" : ""}`);
 
 const telegram = createTelegram({ token: config.telegramToken, log });
@@ -44,6 +53,7 @@ const bot = createBot({
   notifyAdmin: (text) => (config.adminTelegramId ? telegram.send(config.adminTelegramId, { text }) : Promise.resolve()),
   agentOptions: {
     tokens: config.tokens,
+    demoBillers,
     cosmosChainId: config.cosmosChainId,
     publicUrl: config.publicUrl,
     // A unified account's qor1 and 0x addresses are the same 20 bytes.

@@ -71,17 +71,17 @@ The result for the user: **"pay my electricity" just happens, and nothing big ha
 You need the **QoreX** wallet (mobile app or browser extension) on **testnet**, with your post-quantum key registered in QoreX, and some test QOR from the QoreChain testnet faucet.
 
 1. Open **[@QoreBills_bot](https://t.me/QoreBills_bot)** and send `/start`.
-2. Tap **Set up in QoreX**. The page opens in the QoreX browser. Add a biller (any testnet address works, `0x…` or `qor1…`). The defaults are fUSD limits of 20 auto-pay, 100 per bill and 150 a day, 5 payments a day, for 30 days; tick **Pay in QOR** too if you will fund the account with QOR. Tap **Review and sign in QoreX**.
+2. Tap **Set up in QoreX**. The page opens in the QoreX browser with two **demo billers** already chosen (Electricity and Water; more in the list: Internet data, TV subscription, Hostel rent, School fees, or "Other address…" for your own). The demo billers are test addresses run by QoreBills, so test payments are not lost. The default limits work as they are (QOR: auto-pay 1, max 2 per bill, 5 a day; fUSD: 20, 100, 150; 5 payments a day; 30 days). Tap **Review and sign in QoreX**.
 3. QoreX shows the full setup text; sign it. The bot replies with your new account address.
 4. From QoreX, send the account some **QOR**, or **fUSD** in its ERC-20 form.
 5. In the chat, try:
 
 ```text
-pay 0.5 QOR to <your biller>           → paid on its own, with the transaction hash
-pay 0.5 QOR to <your biller>           → refused: that bill is already paid this month
-pay 1.5 QOR to <your biller> ref RENT  → "Approve in QoreX": sign, and it is paid
-pay 50 QOR to <your biller>            → refused: above the most it can pay at once
-pay 1 QOR to someone else              → refused: not on your allowlist
+pay 0.5 QOR to electricity             → paid on its own, with the transaction hash
+pay 0.5 QOR to electricity             → refused: that bill is already paid this month
+pay 1.5 QOR to water ref RENT          → "Approve in QoreX": sign, and it is paid
+pay 50 QOR to electricity              → refused: above the most it can pay at once
+pay 1 QOR to netflix                   → refused: not on your allowlist
 status · billers · history
 pause → sign in QoreX → status shows PAUSED → resume
 ```
