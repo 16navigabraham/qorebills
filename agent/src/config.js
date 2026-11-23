@@ -16,7 +16,6 @@ export function loadConfig(env = process.env) {
   const tokens = env.TOKENS ? JSON.parse(env.TOKENS) : DEFAULT_TOKENS;
   const ownerTelegramId = required(env, "OWNER_TELEGRAM_ID");
   if (!/^\d+$/.test(ownerTelegramId)) throw new Error("OWNER_TELEGRAM_ID must be your numeric Telegram user id.");
-  if (!env.AGENT_MNEMONIC && !env.AGENT_PRIVATE_KEY) throw new Error("Set AGENT_MNEMONIC (or AGENT_PRIVATE_KEY for local tests).");
   return {
     evmRpcUrl: env.QORE_EVM_RPC || "https://evm-testnet.qore.host",
     restUrl: env.QORE_REST || "https://api-testnet.qore.host",
@@ -26,8 +25,9 @@ export function loadConfig(env = process.env) {
     // Optional: normally the account is created through the setup page and remembered in STATE_FILE.
     accountAddress: env.ACCOUNT_ADDRESS ? getAddress(env.ACCOUNT_ADDRESS) : null,
     stateFile: env.STATE_FILE || "data/state.json",
-    agentMnemonic: env.AGENT_MNEMONIC?.trim(),
-    agentPrivateKey: env.AGENT_PRIVATE_KEY?.trim(),
+    rpcUrl: env.QORE_RPC || "https://rpc-testnet.qore.host",
+    // The agent's own key: created on first start and kept in this file (mode 600).
+    agentKeyFile: env.AGENT_KEY_FILE || "data/agent.mnemonic",
     telegramToken: required(env, "TELEGRAM_BOT_TOKEN"),
     ownerTelegramId,
     publicUrl: required(env, "PUBLIC_URL").replace(/\/+$/, ""),

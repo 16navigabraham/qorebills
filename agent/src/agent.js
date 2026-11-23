@@ -108,6 +108,7 @@ export function createAgent({
   requestMinutes = 30,
   parseWithLlm = null,
   notify = async () => {},
+  onAccountReady = async () => {},
   now = () => Date.now(),
   log = console,
 }) {
@@ -474,6 +475,8 @@ export function createAgent({
         hash = created.hash;
         chain.useAccount(created.account);
         state.set({ account: created.account, owner: r.owner });
+        // e.g. widen the agent's scoped EVM window to the new account before reporting success
+        await onAccountReady(created.account).catch((error) => log.error?.("[agent] account follow-up failed:", error.message));
         r.doneText = `Your bill account is ready: ${created.account}\nSend fUSD or QOR to it from QoreX, then ask me to pay a bill. Send “status” to see your limits.`;
       } else {
         ({ hash } = await r.run(bytes));

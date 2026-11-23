@@ -1,0 +1,26 @@
+# Runs the QoreBills agent on the Oracle VM. HTTPS comes from the Caddy server of the
+# Abrahamnavig-claude-tools deployment on the same VM, which reaches this container by
+# name over the shared "edge" Docker network (bills.<DOMAIN> -> qorebills:8787).
+services:
+  qorebills:
+    build: ./agent
+    container_name: qorebills
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - qorebills_data:/app/data
+    expose:
+      - "8787"
+    networks:
+      - edge
+    # The VM has 1 GB of memory and also runs the claude-tools server.
+    mem_limit: 256m
+    environment:
+      NODE_OPTIONS: --max-old-space-size=160
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  qorebills_data:

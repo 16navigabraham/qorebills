@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Contracts
+        working-directory: contracts
+        run: |
+          npm ci
+          npx hardhat compile
+          npm test
+      - name: Agent
+        working-directory: agent
+        run: |
+          npm ci
+          npm test
