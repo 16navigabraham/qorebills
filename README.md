@@ -13,7 +13,7 @@
 Built for [Build Before Q-Day](https://build.qorechain.io), **Post-Quantum AI Agents** track. `#BuildBeforeQDay`
 
 <p align="center">
-  <a href="https://youtu.be/LDySbN4KO_o"><img src="assets/cover-1600x900.png" alt="Watch the QoreBills demo video on YouTube" width="720"></a><br>
+  <a href="https://youtu.be/LDySbN4KO_o"><img src="assets/demo-preview.gif" alt="QoreBills: a payment above the auto-pay limit is approved with an ML-DSA-87 signature in QoreX, verified on chain, then paid. Click for the full video." width="800"></a><br>
   <b><a href="https://youtu.be/LDySbN4KO_o">▶ Watch the 2½-minute demo</a></b> (narrated): setup in QoreX, auto-paid bills, and a big payment approved with an ML-DSA-87 signature verified on chain
 </p>
 
