@@ -174,7 +174,7 @@ flowchart LR
 | `FACTORY_ADDRESS` | required | `BillAgentFactory` |
 | `ADMIN_TELEGRAM_ID` | none | Told when the main key needs gas |
 | `MAX_USERS` | 50 | Accounts the hosted demo will create |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | none, `gemini-2.5-flash` | Free-form request parsing |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | none, `gemini-3.1-flash-lite` | Free-form request parsing |
 | `AGENT_KEY_FILE`, `STATE_FILE` | `data/agent.mnemonic`, `data/state.json` | Key and state files |
 | `QORE_EVM_RPC`, `QORE_REST`, `QORE_RPC` | testnet endpoints | QoreChain endpoints |
 | `EVM_CHAIN_ID`, `COSMOS_CHAIN_ID` | `9800`, `qorechain-diana` | Chains |

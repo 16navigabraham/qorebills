@@ -33,7 +33,7 @@ export function loadConfig(env = process.env) {
     publicUrl: required(env, "PUBLIC_URL").replace(/\/+$/, ""),
     port: Number(env.PORT || 8787),
     geminiApiKey: env.GEMINI_API_KEY?.trim() || null,
-    geminiModel: env.GEMINI_MODEL || "gemini-2.5-flash",
+    geminiModel: env.GEMINI_MODEL || "gemini-3.1-flash-lite",
     approvalMinutes: Number(env.APPROVAL_MINUTES || 30),
     tokens: tokens.map((t) => ({ ...t, address: getAddress(t.address) })),
   };
