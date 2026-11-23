@@ -119,7 +119,7 @@ sequenceDiagram
     else above the auto-pay limit
         A->>C: approvalMessage(…): the exact text to sign
         A-->>U: "Approve in QoreX" link
-        U->>U: the page shows the exact text; QoreX signs it with ML-DSA-87
+        U->>U: the page shows the exact text, QoreX signs it with ML-DSA-87
         U->>A: signature (from the signing page)
         A->>C: payWithApproval(…, signature)
         C->>P: pqcKeyStatus(owner): registered, ML-DSA-87, proof of possession?
