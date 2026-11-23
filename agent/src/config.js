@@ -22,7 +22,10 @@ export function loadConfig(env = process.env) {
     restUrl: env.QORE_REST || "https://api-testnet.qore.host",
     evmChainId: Number(env.EVM_CHAIN_ID || 9800),
     cosmosChainId: env.COSMOS_CHAIN_ID || "qorechain-diana",
-    accountAddress: getAddress(required(env, "ACCOUNT_ADDRESS")),
+    factoryAddress: getAddress(required(env, "FACTORY_ADDRESS")),
+    // Optional: normally the account is created through the setup page and remembered in STATE_FILE.
+    accountAddress: env.ACCOUNT_ADDRESS ? getAddress(env.ACCOUNT_ADDRESS) : null,
+    stateFile: env.STATE_FILE || "data/state.json",
     agentMnemonic: env.AGENT_MNEMONIC?.trim(),
     agentPrivateKey: env.AGENT_PRIVATE_KEY?.trim(),
     telegramToken: required(env, "TELEGRAM_BOT_TOKEN"),

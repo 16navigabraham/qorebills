@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QoreBills setup</title>
+<style>
+  :root { --bg: #f6f7fb; --card: #ffffff; --text: #141824; --muted: #5d6475; --line: #e3e6ee; --field: #ffffff; --accent: #3a4fd9; --ok: #157a4a; --bad: #b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f121a; --card: #171b26; --text: #eef0f6; --muted: #a2a9ba; --line: #2a3040; --field: #0f121a; --accent: #8193ff; --ok: #5bd49a; --bad: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 6px 0 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: .9rem; color: var(--muted); }
+  input[type=text], input[type=number] { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font: inherit; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .row { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+  .row button { padding: 10px 12px; background: transparent; color: var(--muted); border: 1px solid var(--line); width: auto; }
+  .toggle { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-weight: 600; color: var(--text); font-size: 1rem; }
+  button { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px dashed var(--line); padding: 10px; }
+  button:disabled { opacity: .5; cursor: default; }
+  pre { white-space: pre-wrap; word-break: break-all; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0 0; color: var(--muted); }
+  #status { margin-top: 14px; min-height: 1.5em; word-break: break-all; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  [hidden] { display: none !important; }
+  @media (max-width: 420px) {
+    .grid { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 1fr; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    .row button { justify-self: end; padding: 4px 8px; border: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Set up QoreBills</h1>
+  <p class="sub">Choose who your agent may pay and how much. You sign the whole setup once in QoreX with your post-quantum key; the agent pays the gas.</p>
+
+  <form id="form">
+    <div class="card">
+      <h2>Billers</h2>
+      <div id="billers"></div>
+      <button type="button" class="ghost" id="addBiller">+ Add biller</button>
+      <p class="hint">The agent can only ever pay these addresses (0x… or qor1…).</p>
+    </div>
+
+    <div class="card" id="limits"></div>
+
+    <div class="card">
+      <div class="grid" style="grid-template-columns: 1fr 1fr">
+        <label>Payments per day<input type="number" id="perDay" min="1" max="100" value="5" required></label>
+        <label>Agent can pay for (days)<input type="number" id="days" min="1" max="365" value="30" required></label>
+      </div>
+    </div>
+
+    <button type="submit" id="go">Review and sign in QoreX</button>
+  </form>
+
+  <div class="card" id="review" hidden>
+    <strong>You are signing exactly this text</strong>
+    <pre id="message"></pre>
+  </div>
+  <div id="status" role="status"></div>
+</main>
+<script src="/qorex.js"></script>
+<script>
+(() => {
+  const id = location.pathname.split("/").pop();
+  const $ = (x) => document.getElementById(x);
+  const say = (text, cls = "") => { $("status").className = cls; $("status").textContent = text; };
+  const DEFAULTS = { fUSD: ["20", "100", "150", true], QOR: ["1", "2", "5", false] };
+  let request = null;
+
+  function input(labelText, value, attrs = {}) {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const el = document.createElement("input");
+    Object.assign(el, { type: "text", value, ...attrs });
+    label.appendChild(el);
+    return { label, el };
+  }
+
+  function addBiller(name = "", address = "") {
+    const row = document.createElement("div");
+    row.className = "row";
+    const n = input("Name", name, { placeholder: "IBEDC electricity", maxLength: 40, required: true });
+    const a = input("Address", address, { placeholder: "0x… or qor1…", required: true });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", "Remove biller");
+    remove.onclick = () => row.remove();
+    row.append(n.label, a.label, remove);
+    $("billers").appendChild(row);
+  }
+
+  function renderLimits(symbols) {
+    // fUSD first: bills are usually paid in the test dollar.
+    for (const symbol of [...symbols].sort((a, b) => (b === "fUSD") - (a === "fUSD"))) {
+      const [autoPay, maxPer, daily, on] = DEFAULTS[symbol] || ["1", "2", "5", false];
+      const box = document.createElement("div");
+      box.style.marginBottom = "12px";
+      box.innerHTML = `<label class="toggle"><input type="checkbox" data-token="${symbol}"> Pay in ${symbol}</label>`;
+      box.querySelector("input").checked = on;
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      for (const [key, text, value] of [["autoPay", "Auto-pay up to", autoPay], ["maxPer", "Max per bill", maxPer], ["daily", "Daily cap", daily]]) {
+        const f = input(text, value, { inputMode: "decimal" });
+        f.el.dataset.token = symbol;
+        f.el.dataset.key = key;
+        grid.appendChild(f.label);
+      }
+      box.appendChild(grid);
+      const toggle = box.querySelector("input[type=checkbox]");
+      grid.hidden = !toggle.checked;
+      toggle.onchange = () => { grid.hidden = !toggle.checked; };
+      $("limits").appendChild(box);
+    }
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Bills up to the auto-pay limit are paid at once. Bigger ones wait for your signature, and nothing goes above the max per bill or the daily cap.";
+    $("limits").appendChild(hint);
+  }
+
+  function readForm() {
+    const billers = [...$("billers").querySelectorAll(".row")].map((row) => {
+      const [name, address] = row.querySelectorAll("input");
+      return { name: name.value.trim(), address: address.value.trim() };
+    });
+    const limits = {};
+    for (const box of $("limits").querySelectorAll("input[type=checkbox]")) {
+      if (!box.checked) continue;
+      const symbol = box.dataset.token;
+      limits[symbol] = {};
+      for (const el of $("limits").querySelectorAll(`input[type=text][data-token="${symbol}"]`)) limits[symbol][el.dataset.key] = el.value.trim();
+    }
+    return { billers, limits, paymentsPerDay: Number($("perDay").value), days: Number($("days").value) };
+  }
+
+  $("addBiller").onclick = () => addBiller();
+
+  $("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("go").disabled = true;
+    try {
+      say("Connecting to QoreX…");
+      const owner = await QoreXSign.address(request.cosmosChainId);
+      say("Preparing your setup…");
+      const draft = await QoreXSign.post(`/api/requests/${id}/draft`, { owner, form: readForm() });
+      $("message").textContent = draft.message;
+      $("review").hidden = false;
+      const { signature } = await QoreXSign.sign(request.cosmosChainId, draft.message, owner, say);
+      say("Signed. Creating your account on QoreChain…");
+      const out = await QoreXSign.post(`/api/requests/${id}/sign`, { signature });
+      $("form").hidden = true;
+      say(`Your account is ready. Go back to Telegram to fund it and pay your first bill. Transaction: ${out.txHash}`, "ok");
+    } catch (error) {
+      say(error.message || String(error), "bad");
+      $("go").disabled = false;
+    }
+  });
+
+  (async () => {
+    const r = await fetch(`/api/requests/${id}`, { cache: "no-store" });
+    if (!r.ok) { $("form").hidden = true; return say("This setup link is not valid. Send “setup” to the bot.", "bad"); }
+    request = await r.json();
+    if (request.kind !== "setup") { $("form").hidden = true; return say("This is not a setup link.", "bad"); }
+    if (request.status === "done") { $("form").hidden = true; return say("This setup is done. Go back to Telegram.", "ok"); }
+    if (!["draft", "pending"].includes(request.status)) { $("form").hidden = true; return say(`This setup is ${request.status}. Send “setup” to the bot.`, "bad"); }
+    renderLimits(request.tokens);
+    addBiller();
+  })().catch(() => say("Could not load this setup.", "bad"));
+})();
+</script>
+</body>
+</html>

@@ -53,3 +53,27 @@ test("reads the post-quantum part of a QoreX signature", () => {
   assert.throws(() => pqSignatureBytes({ pq: { algorithmId: 2, signature: "AQ==" } }), /ML-DSA-87/);
   assert.throws(() => pqSignatureBytes({}), /post-quantum/);
 });
+
+test("parses settings commands", () => {
+  const p = (t) => parseCommand(t, DEFAULT_TOKENS);
+  assert.deepEqual(p("setup"), { kind: "setup" });
+  assert.deepEqual(p("pause"), { kind: "pause" });
+  assert.deepEqual(p("/resume"), { kind: "resume" });
+  assert.deepEqual(p("revoke"), { kind: "revoke" });
+  assert.deepEqual(p("renew 14"), { kind: "renew", days: 14 });
+  assert.deepEqual(p("renew"), { kind: "renew", days: 30 });
+  assert.deepEqual(p("add biller Campus hostel 0x1111111111111111111111111111111111111111"), {
+    kind: "add_biller", name: "Campus hostel", address: "0x1111111111111111111111111111111111111111",
+  });
+  assert.deepEqual(p("remove biller water board"), { kind: "remove_biller", billerQuery: "water board" });
+  assert.deepEqual(p("limits fusd 20 100 150"), { kind: "set_limits", token: "fUSD", autoPay: "20", maxPer: "100", daily: "150" });
+  assert.deepEqual(p("limits QOR off"), { kind: "disable_token", token: "QOR" });
+  assert.deepEqual(p("limits"), { kind: "status" });
+  assert.deepEqual(p("payments per day 5"), { kind: "set_max_payments", count: 5 });
+  assert.deepEqual(p("withdraw 10 fUSD to 0x1111111111111111111111111111111111111111"), {
+    kind: "withdraw", amount: "10", token: "fUSD", address: "0x1111111111111111111111111111111111111111",
+  });
+  for (const bad of ["renew 0", "renew forever", "add biller 0x1111111111111111111111111111111111111111", "limits fUSD 1 2", "limits xyz 1 2 3", "withdraw all", "payments per day lots"]) {
+    assert.equal(p(bad).kind, "settings_help", bad);
+  }
+});

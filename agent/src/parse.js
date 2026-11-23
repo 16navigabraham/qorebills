@@ -11,7 +11,15 @@ const SIMPLE = {
   billers: "billers",
   history: "history",
   cancel: "cancel",
+  setup: "setup",
+  pause: "pause",
+  resume: "resume",
+  unpause: "resume",
+  revoke: "revoke",
 };
+
+const ADDRESS = /^(0x[0-9a-fA-F]{40}|qor1[02-9ac-hj-np-z]{38})$/;
+const AMOUNT = /^\d+(\.\d+)?$/;
 
 const STOP_WORDS = new Set(["my", "the", "bill", "bills", "to", "for", "a", "an", "of", "please", "pay"]);
 
@@ -20,6 +28,8 @@ export function parseCommand(text, tokens) {
   const trimmed = String(text || "").trim();
   const first = trimmed.split(/\s+/)[0]?.replace(/^\//, "").replace(/@\w+$/, "").toLowerCase();
   if (SIMPLE[first] && trimmed.split(/\s+/).length === 1) return { kind: SIMPLE[first] };
+  const settings = parseSettings(trimmed.replace(/^\//, ""), tokens);
+  if (settings) return settings;
   if (first !== "pay") return { kind: "unknown" };
 
   let words = trimmed.split(/\s+/).slice(1);
@@ -76,4 +86,53 @@ export function resolveBiller(query, billers) {
 export function defaultRef(billerName, date = new Date()) {
   const month = date.toISOString().slice(0, 7);
   return `${normalise(billerName).replace(/ /g, "-")}-${month}`;
+}
+
+const SETTINGS_HELP = { kind: "settings_help" };
+
+/** Settings commands. They all end in a message the owner signs in QoreX. */
+function parseSettings(text, tokens) {
+  const words = text.split(/\s+/);
+  const lower = words.map((w) => w.toLowerCase());
+  const token = (w) => tokens.find((t) => t.symbol.toLowerCase() === String(w).toLowerCase())?.symbol;
+
+  // renew 30  -> the agent may pay for 30 more days
+  if (lower[0] === "renew") {
+    const days = Number(words[1] ?? 30);
+    return Number.isInteger(days) && days >= 1 && days <= 365 ? { kind: "renew", days } : SETTINGS_HELP;
+  }
+  // add biller Campus hostel 0x...
+  if (lower[0] === "add" && lower[1] === "biller") {
+    const address = words.at(-1);
+    const name = words.slice(2, -1).join(" ");
+    return ADDRESS.test(address) && name ? { kind: "add_biller", name, address } : SETTINGS_HELP;
+  }
+  // remove biller water board
+  if (lower[0] === "remove" && lower[1] === "biller") {
+    const billerQuery = words.slice(2).join(" ");
+    return billerQuery ? { kind: "remove_biller", billerQuery } : SETTINGS_HELP;
+  }
+  // limits fUSD 20 100 150  (auto-pay, max per payment, daily cap); limits fUSD off
+  if (lower[0] === "limits" && words.length > 1) {
+    const symbol = token(words[1]);
+    if (!symbol) return SETTINGS_HELP;
+    if (lower[2] === "off" && words.length === 3) return { kind: "disable_token", token: symbol };
+    const [autoPay, maxPer, daily] = words.slice(2);
+    return words.length === 5 && [autoPay, maxPer, daily].every((v) => AMOUNT.test(v))
+      ? { kind: "set_limits", token: symbol, autoPay, maxPer, daily }
+      : SETTINGS_HELP;
+  }
+  // payments per day 5
+  if (lower.slice(0, 3).join(" ") === "payments per day") {
+    const n = Number(words[3]);
+    return Number.isInteger(n) && n >= 0 && n <= 1000 && words.length === 4 ? { kind: "set_max_payments", count: n } : SETTINGS_HELP;
+  }
+  // withdraw 10 fUSD to 0x...
+  if (lower[0] === "withdraw") {
+    const [, amount, symbol, to, address] = words;
+    return words.length === 5 && AMOUNT.test(amount) && token(symbol) && lower[3] === "to" && ADDRESS.test(address)
+      ? { kind: "withdraw", amount, token: token(symbol), address }
+      : SETTINGS_HELP;
+  }
+  return null;
 }

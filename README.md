@@ -29,40 +29,35 @@ You chat with the agent ("pay my electricity, 20 fUSD"), it decides what to do, 
 
 ## Status
 
-Day 2: the `BillAgentAccount` smart account is written and tested (24 tests, `contracts/`).
+Built and tested: the contracts (35 tests, `contracts/`) and the agent (17 tests, `agent/`, including an end-to-end run on a local Hardhat node). Next: the agent key's QoreChain set-up and the testnet deploy.
+
+### How it works
+
+1. **Setup.** The owner opens the bot, taps "Set up in QoreX", chooses billers and limits, and signs the whole setup once with their ML-DSA-87 key. The agent submits it to `BillAgentFactory`, which checks the signature on chain and creates the owner's `BillAgentAccount`. The owner pays no gas and needs no EVM window.
+2. **Paying.** "pay 15 fUSD to IBEDC electricity" goes through at once when it is within the auto-pay limit. Above it, the bot sends an approval link; the owner signs in QoreX and the contract verifies the signature before paying.
+3. **Settings.** Pause, resume, add or remove billers, change limits, renew or revoke the agent, withdraw: each one is a message the owner signs in QoreX and the contract verifies.
 
 | Limit | How the contract enforces it |
 | --- | --- |
 | Target | Only billers the owner allowlisted can be paid |
 | Value | Per token: an auto-pay limit, a hard cap per payment and a cap per UTC day |
 | Transactions | A maximum number of payments per UTC day |
-| Duration | The agent key stops working at its expiry; the owner can pause or revoke it at once |
-| Approval | Above the auto-pay limit, the agent needs the owner's ML-DSA-87 signature, checked on chain with QoreChain's PQC Verify (`0x…0A01`) against the key registered for the owner (PQC Key Status, `0x…0A02`, proof of possession required) |
+| Duration | The agent key stops working at its expiry; the owner can pause or revoke it at any time |
+| Approval | Above the auto-pay limit, the owner's ML-DSA-87 signature, checked with QoreChain's PQC Verify precompile (`0x…0A01`) against the key registered for the owner (PQC Key Status, `0x…0A02`, proof of possession required) |
 
-Each bill reference is paid once, each approval has a nonce and a deadline, and the owner can withdraw at any time.
-The owner signs approvals with QoreChain message signing v1 (`qorechain-msg-v1|qorechain-diana|` + the approval text), so the wallet shows the biller, amount and expiry in plain text.
+Every signed message is plain text the wallet shows in full (QoreSign message signing v1: `qorechain-msg-v1|qorechain-diana|` + text), with amounts in the token's own units, a deadline and a nonce, so a signature can be used once, for exactly what it says. Each bill reference is paid once.
 
-```bash
-cd contracts && npm install && npm test
-```
+Checked on the testnet: an ML-DSA-87 signature in that format verifies with QoreChain's `pqcVerify` precompile, and a changed message does not.
 
 ### The agent (`agent/`)
 
-A Node.js service with a Telegram bot, [@QoreBills_bot](https://t.me/QoreBills_bot). It only answers its owner's Telegram account.
-
-- `pay 15 fUSD to IBEDC electricity` pays an allowlisted biller. Small bills go through at once; each bill reference (by default biller + month) is paid once.
-- Above the auto-pay limit it sends an approval link. The page opens in the QoreX app, shows the exact text, and asks QoreX to sign it with the owner's ML-DSA-87 key (`signArbitrary`). The agent submits that signature and the contract verifies it on chain.
-- `status`, `billers`, `history` and `cancel` read the account and its limits.
-- With a Gemini key it also understands free-form requests. The model only proposes a command: the agent checks it against the allowlist and the limits, and the contract enforces them again.
+A Node.js service with a Telegram bot, [@QoreBills_bot](https://t.me/QoreBills_bot), and the QoreX signing pages. It only answers its owner's Telegram account. With a Gemini key it also understands free-form requests; the model only proposes a command, which the agent checks against the allowlist and limits before the contract checks them again.
 
 ```bash
+cd contracts && npm install && npm test
 cd agent && npm install && npm test   # unit tests + an end-to-end run on a local Hardhat node
 cp .env.example .env                  # fill in, then: npm start
 ```
-
-Checked on the testnet: an ML-DSA-87 signature over `qorechain-msg-v1|qorechain-diana|` + the approval text verifies with QoreChain's `pqcVerify` precompile, and a changed message does not.
-
-Next: agent key set-up on QoreChain (PQC key and a scoped EVM window), then the testnet deploy.
 
 ## Testnet addresses
 

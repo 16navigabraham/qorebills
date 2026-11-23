@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QoreBills approval</title>
+<title>QoreBills signature</title>
 <style>
   :root { --bg: #f6f7fb; --card: #ffffff; --text: #141824; --muted: #5d6475; --line: #e3e6ee; --accent: #3a4fd9; --ok: #157a4a; --bad: #b42318; }
   @media (prefers-color-scheme: dark) {
@@ -19,15 +19,14 @@
   pre { white-space: pre-wrap; word-break: break-all; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0 0; color: var(--muted); }
   button { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
-  #status { margin-top: 14px; min-height: 1.5em; }
+  #status { margin-top: 14px; min-height: 1.5em; word-break: break-all; }
   .ok { color: var(--ok); } .bad { color: var(--bad); }
-  a { color: var(--accent); word-break: break-all; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Approve a bill payment</h1>
-  <p class="sub">Your QoreBills agent needs your post-quantum signature for this one.</p>
+  <h1 id="title">Sign in QoreX</h1>
+  <p class="sub" id="intro">Your QoreBills agent needs your post-quantum signature.</p>
   <div class="card">
     <div class="summary" id="summary">Loading…</div>
     <div class="sub" id="expiry" style="margin:4px 0 0"></div>
@@ -39,65 +38,47 @@
   <button id="sign" disabled>Sign with QoreX</button>
   <div id="status" role="status"></div>
 </main>
+<script src="/qorex.js"></script>
 <script>
 (() => {
   const id = location.pathname.split("/").pop();
   const $ = (x) => document.getElementById(x);
   const say = (text, cls = "") => { $("status").className = cls; $("status").textContent = text; };
-  let approval = null;
+  let request = null;
 
   async function load() {
-    const r = await fetch(`/api/approvals/${id}`, { cache: "no-store" });
-    if (!r.ok) { $("summary").textContent = "This approval link is not valid."; return; }
-    approval = await r.json();
-    $("summary").textContent = approval.summary;
-    $("message").textContent = approval.message;
-    $("expiry").textContent = `Valid until ${new Date(approval.expiresAt * 1000).toLocaleString()}`;
-    if (approval.status === "paid") {
-      say("Already approved and paid.", "ok");
-    } else if (approval.status !== "pending") {
-      say(`This approval is ${approval.status}. Ask the bot again.`, "bad");
+    const r = await fetch(`/api/requests/${id}`, { cache: "no-store" });
+    if (!r.ok) { $("summary").textContent = "This link is not valid."; return; }
+    request = await r.json();
+    if (request.kind === "payment") {
+      $("title").textContent = "Approve a bill payment";
+      $("intro").textContent = "This payment is above your auto-pay limit, so it needs your post-quantum signature.";
     } else {
-      $("sign").disabled = false;
+      $("title").textContent = "Change a setting";
+      $("intro").textContent = "Settings change only with your post-quantum signature.";
     }
-  }
-
-  // QoreX injects its provider after the page loads, so wait for it a little.
-  async function wallet() {
-    for (let i = 0; i < 20 && !window.qorex?.native; i++) await new Promise((r) => setTimeout(r, 150));
-    return window.qorex?.native || null;
+    $("summary").textContent = request.summary;
+    $("message").textContent = request.message;
+    $("expiry").textContent = `Valid until ${new Date(request.expiresAt * 1000).toLocaleString()}`;
+    if (request.status === "done") say("Already done.", "ok");
+    else if (request.status !== "pending") say(`This request is ${request.status}. Ask the bot again.`, "bad");
+    else $("sign").disabled = false;
   }
 
   $("sign").addEventListener("click", async () => {
     $("sign").disabled = true;
     try {
-      const q = await wallet();
-      if (!q) throw new Error("QoreX not found. Open this link in the QoreX app's browser (testnet mode) or with the QoreX extension.");
-      if (Array.isArray(q.capabilities) && !q.capabilities.includes("signArbitrary")) throw new Error("This QoreX version cannot sign messages. Update QoreX.");
-      say("Waiting for QoreX…");
-      await q.enable(approval.cosmosChainId);
-      const { bech32Address } = await q.getKey(approval.cosmosChainId);
-      const signature = await q.signArbitrary(approval.cosmosChainId, bech32Address, approval.message);
-      say("Signed. Sending the payment…");
-      const r = await fetch(`/api/approvals/${id}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signature }),
-      });
-      const out = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(out.error || "The payment was not made.");
-      $("status").className = "ok";
-      $("status").textContent = "Paid. Your signature was verified on chain. Transaction: ";
-      const tx = document.createElement("code");
-      tx.textContent = out.txHash;
-      $("status").appendChild(tx);
+      const { signature } = await QoreXSign.sign(request.cosmosChainId, request.message, request.ownerBech32, say);
+      say("Signed. Sending it…");
+      const out = await QoreXSign.post(`/api/requests/${id}/sign`, { signature });
+      say(`Done. Your signature was verified on chain. Transaction: ${out.txHash}`, "ok");
     } catch (error) {
       say(error.message || String(error), "bad");
       $("sign").disabled = false;
     }
   });
 
-  load().catch(() => { $("summary").textContent = "Could not load this approval."; });
+  load().catch(() => { $("summary").textContent = "Could not load this request."; });
 })();
 </script>
 </body>

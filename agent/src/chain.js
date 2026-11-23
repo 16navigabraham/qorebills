@@ -7,14 +7,15 @@ import {
   getAddress,
   http,
   keccak256,
+  parseEventLogs,
   toBytes,
   toHex,
   zeroAddress,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { billAgentAccountAbi as abi, erc20Abi } from "./abi.js";
+import { billAgentAccountAbi as abi, billAgentFactoryAbi as factoryAbi, erc20Abi } from "./abi.js";
 
-/** A refusal from the contract, with its custom error name and arguments. */
+/** A refusal from a contract, with its custom error name and arguments. */
 export class ContractRefusal extends Error {
   constructor(errorName, args) {
     super(errorName);
@@ -25,6 +26,7 @@ export class ContractRefusal extends Error {
 
 /** Bill references are stored on chain as keccak256 of their text. */
 export const refHash = (ref) => keccak256(toBytes(ref));
+const text = (bytes) => new TextDecoder().decode(toBytes(bytes));
 
 function refusalFrom(error) {
   if (error instanceof BaseError) {
@@ -34,7 +36,7 @@ function refusalFrom(error) {
   return null;
 }
 
-export function createChain({ rpcUrl, evmChainId, accountAddress, privateKey, tokens }) {
+export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAddress, accountAddress = null }) {
   const chain = defineChain({
     id: evmChainId,
     name: "QoreChain",
@@ -45,26 +47,37 @@ export function createChain({ rpcUrl, evmChainId, accountAddress, privateKey, to
   const publicClient = createPublicClient({ chain, transport });
   const agent = privateKeyToAccount(privateKey);
   const wallet = createWalletClient({ chain, transport, account: agent });
-  const contract = { address: getAddress(accountAddress), abi };
-  const read = (functionName, args = []) => publicClient.readContract({ ...contract, functionName, args });
+  const factory = { address: getAddress(factoryAddress), abi: factoryAbi };
+  let account = accountAddress ? getAddress(accountAddress) : null;
 
-  async function send(functionName, args) {
+  const contract = () => {
+    if (!account) throw new Error("No account set up yet.");
+    return { address: account, abi };
+  };
+  const read = (functionName, args = []) => publicClient.readContract({ ...contract(), functionName, args });
+
+  async function send(target, functionName, args) {
     let request;
     try {
-      ({ request } = await publicClient.simulateContract({ ...contract, functionName, args, account: agent }));
+      ({ request } = await publicClient.simulateContract({ ...target, functionName, args, account: agent }));
     } catch (error) {
       throw refusalFrom(error) || error;
     }
     const hash = await wallet.writeContract(request);
     const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     if (receipt.status !== "success") throw new Error(`Transaction ${hash} reverted.`);
-    return { hash, blockNumber: receipt.blockNumber };
+    return { hash, receipt };
   }
 
   return {
     agentAddress: agent.address,
-    accountAddress: contract.address,
     publicClient,
+    get accountAddress() {
+      return account;
+    },
+    useAccount(address) {
+      account = address ? getAddress(address) : null;
+    },
 
     async billers() {
       const list = await read("billerList");
@@ -77,20 +90,20 @@ export function createChain({ rpcUrl, evmChainId, accountAddress, privateKey, to
         read("limits", [token.address]),
         read("remainingToday", [token.address]),
         token.address === zeroAddress
-          ? publicClient.getBalance({ address: contract.address })
-          : publicClient.readContract({ address: token.address, abi: erc20Abi, functionName: "balanceOf", args: [contract.address] }),
+          ? publicClient.getBalance({ address: account })
+          : publicClient.readContract({ address: token.address, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
       ]);
       const [autoPayLimit, maxPerPayment, dailyCap, enabled] = limits;
       return { ...token, autoPayLimit, maxPerPayment, dailyCap, enabled, remainingToday, balance };
     },
 
     async snapshot() {
-      const [agentKey, agentExpiry, paused, maxPaymentsPerDay, approvalNonce, today, owner] = await Promise.all([
+      const [agentKey, agentExpiry, paused, maxPaymentsPerDay, nonce, today, owner] = await Promise.all([
         read("agent"),
         read("agentExpiry"),
         read("paused"),
         read("maxPaymentsPerDay"),
-        read("approvalNonce"),
+        read("nonce"),
         read("today"),
         read("owner"),
       ]);
@@ -99,28 +112,50 @@ export function createChain({ rpcUrl, evmChainId, accountAddress, privateKey, to
         Promise.all(tokens.map((t) => this.tokenState(t))),
         this.billers(),
       ]);
-      return { owner, agent: agentKey, agentExpiry, paused, maxPaymentsPerDay, paymentsToday, approvalNonce, tokens: tokenStates, billers };
+      return { owner, agent: agentKey, agentExpiry, paused, maxPaymentsPerDay, paymentsToday, nonce, tokens: tokenStates, billers };
     },
 
     refPaid: (ref) => read("refPaid", [refHash(ref)]),
-    approvalNonce: () => read("approvalNonce"),
+    nonce: () => read("nonce"),
     owner: () => read("owner"),
 
-    /** The exact text the owner's wallet signs, as a string. */
+    /** The exact text the owner's wallet signs to approve a payment. */
     async approvalMessage({ biller, token, amount, ref, deadline, nonce }) {
-      const bytes = await read("approvalMessage", [biller, token, amount, refHash(ref), BigInt(deadline), nonce]);
-      return new TextDecoder().decode(toBytes(bytes));
+      return text(await read("approvalMessage", [biller, token, amount, refHash(ref), BigInt(deadline), nonce]));
     },
 
-    pay: ({ biller, token, amount, ref }) => send("pay", [biller, token, amount, refHash(ref)]),
+    /** The exact text the owner's wallet signs to change a setting. */
+    async actionMessage({ action, deadline, nonce }) {
+      return text(await read("actionMessage", [action, BigInt(deadline), nonce]));
+    },
+
+    pay: ({ biller, token, amount, ref }) => send(contract(), "pay", [biller, token, amount, refHash(ref)]),
 
     payWithApproval: ({ biller, token, amount, ref, deadline, signature }) =>
-      send("payWithApproval", [biller, token, amount, refHash(ref), BigInt(deadline), toHex(signature)]),
+      send(contract(), "payWithApproval", [biller, token, amount, refHash(ref), BigInt(deadline), toHex(signature)]),
+
+    executeSigned: ({ action, deadline, signature }) =>
+      send(contract(), "executeSigned", [action, BigInt(deadline), toHex(signature)]),
+
+    /** The exact text the owner's wallet signs to create an account. */
+    async setupMessage({ owner, config, setupId, deadline }) {
+      return text(
+        await publicClient.readContract({ ...factory, functionName: "setupMessage", args: [owner, config, setupId, BigInt(deadline)] }),
+      );
+    },
+
+    async createAccount({ owner, config, setupId, deadline, signature }) {
+      const { hash, receipt } = await send(factory, "createAccount", [owner, config, setupId, BigInt(deadline), toHex(signature)]);
+      const [created] = parseEventLogs({ abi: factoryAbi, eventName: "AccountCreated", logs: receipt.logs });
+      return { hash, account: created.args.account };
+    },
+
+    accountOf: (owner) => publicClient.readContract({ ...factory, functionName: "accountOf", args: [owner] }),
 
     async recentPayments({ blocks = 20_000n } = {}) {
       const latest = await publicClient.getBlockNumber();
       const fromBlock = latest > blocks ? latest - blocks : 0n;
-      const logs = await publicClient.getContractEvents({ ...contract, eventName: "BillPaid", fromBlock, toBlock: latest });
+      const logs = await publicClient.getContractEvents({ ...contract(), eventName: "BillPaid", fromBlock, toBlock: latest });
       return logs.map((log) => ({ ...log.args, hash: log.transactionHash, blockNumber: log.blockNumber }));
     },
   };
