@@ -262,6 +262,10 @@ QoreChain testnet `qorechain-diana`, EVM chain id `9800`, deployed 23 November 2
 | --- | --- | --- |
 | `BillAgentFactory` | `0xF0385815a19009FBC01ba24773469c5e4e4e9b2D` | `qor17qu9s9dpjqylhsqm5frhx35ute8yaxedecfxqh` |
 | `BillAgentDeployer` | `0x06C4E1194deb3c3BbE91022fc4507b6BF5023114` | `qor1qmzwzx2dav7rh053qghug5rmd06syvg5hhmme2` |
+| Deployer key (deployed the factory) | `0xaef5281f5D67D51DdcF9323FAC97476f54446667` | `qor14m6js86avl23mh8exgl6e968da2ygen8yphmds` |
+| Agent main key (creates accounts, funds agent keys) | `0x08159dF4b23c52e80eC28667cF3FD9059e8F47Aa` | `qor1pq2ema9j83fwsrkzsenu707eqk0g73a2m23rmq` |
+| Example user account (created by the factory) | `0xB396bDfB9c521f888bB3f74bAAdb728D10017d14` | `qor1kwttm7uu2g0c3zan7a964kmj35gqzlg5nez3d2` |
+| Its agent key (EVM window scoped to that account) | `0x7C97D912e6341E54eaAAEFe47dC9389B8E26fbEC` | `qor10jtajyhxxs09f642alj8mjfcnw8zd7lvg3vce5` |
 
 - Deploy transaction `0x05bd2652e47accc97f24ea6d13939ba1fc7d95a33fd1933a703fd0f44b2ab016` (5,919,188 gas).
 - The deployer registered its ML-DSA-87 key with a proof of possession, deployed inside a short unscoped EVM window (contract creation needs one), then closed the window.
