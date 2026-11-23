@@ -159,7 +159,9 @@ test("the owner creates the account with one post-quantum signature", async () =
   const r = await sign(id);
   const out = await r.json();
   assert.equal(r.status, 200, JSON.stringify(out));
-  assert.match(notices.at(-1), /^Your bill account is ready: 0x[0-9a-fA-F]{40}/);
+  assert.match(notices.at(-1), /^Your bill account is ready\.\n\nTo fund it, open QoreX → Send and send QOR to your account's address:\nqor1[0-9a-f]{40}\n/);
+  assert.match((await agent.handle("fund")).text, new RegExp(`\n${addresses.toBech32(chain.accountAddress)}\n`));
+  assert.match((await agent.handle("status")).text, /^Your account: qor1[0-9a-f]{40}\n\(EVM form 0x/);
   assert.ok(chain.accountAddress);
   await globalThis.fund(chain.accountAddress);
 });

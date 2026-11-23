@@ -77,7 +77,7 @@ You need the **QoreX** wallet (mobile app or browser extension) on **testnet**, 
 1. Open **[@QoreBills_bot](https://t.me/QoreBills_bot)** and send `/start`.
 2. Tap **Set up in QoreX**. The page opens in the QoreX browser with two **demo billers** already chosen (Electricity and Water; more in the list: Internet data, TV subscription, Hostel rent, School fees, or "Other address…" for your own). The demo billers are test addresses run by QoreBills, so test payments are not lost. The default limits work as they are (QOR: auto-pay 1, max 2 per bill, 5 a day; fUSD: 20, 100, 150; 5 payments a day; 30 days). Tap **Review and sign in QoreX**.
 3. QoreX shows the full setup text; sign it. The bot replies with your new account address.
-4. From QoreX, send the account some **QOR**, or **fUSD** in its ERC-20 form.
+4. From QoreX → Send, send the account some **QOR** to the `qor1…` address the bot gives you (send `fund` to see it again).
 5. In the chat, try:
 
 ```text
@@ -227,7 +227,7 @@ Chat commands:
 | Command | What happens |
 |---|---|
 | `pay 15 fUSD to IBEDC electricity [ref INV-1]` | Pays at once within the auto-pay limit, otherwise sends an approval link |
-| `status` · `billers` · `history` | Limits, balances, today's spend and count, expiry · allowed billers · recent payments |
+| `status` · `fund` · `billers` · `history` | Limits, balances, today's spend and count, expiry · the `qor1` address to send QOR to from QoreX · allowed billers · recent payments |
 | `pause` · `resume` · `revoke` · `renew 30` | Signed in QoreX |
 | `add biller Campus hostel 0x…` · `remove biller water` | Signed in QoreX |
 | `limits fUSD 20 100 150` · `limits QOR off` · `payments per day 5` | Signed in QoreX |

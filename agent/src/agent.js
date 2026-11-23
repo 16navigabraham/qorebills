@@ -10,6 +10,7 @@ export const HELP = [
   "Paying",
   "pay 15 fUSD to IBEDC electricity — pay a bill (add “ref INV-123” for the bill's own reference)",
   "status — limits, balances and what is left today",
+  "fund — the address to send QOR to from QoreX",
   "billers — who I am allowed to pay",
   "history — recent payments",
   "cancel — drop the request waiting for your signature",
@@ -248,11 +249,21 @@ export function createAgent({
 
   // ---------------------------------------------------------------- reading
 
+  function fundText(account) {
+    return [
+      "To fund it, open QoreX → Send and send QOR to your account's address:",
+      addresses.toBech32(account),
+      "",
+      `(The same account in EVM form: ${account}. Use that only from an EVM wallet.)`,
+    ].join("\n");
+  }
+
   async function status() {
     const s = await chain.snapshot();
     const expiry = new Date(Number(s.agentExpiry) * 1000).toISOString().replace("T", " ").slice(0, 16);
     const lines = [
-      `Smart account ${chain.accountAddress}`,
+      `Your account: ${addresses.toBech32(chain.accountAddress)}`,
+      `(EVM form ${chain.accountAddress})`,
       s.paused
         ? "PAUSED: I cannot pay anything."
         : s.agent.toLowerCase() !== chain.agentAddress.toLowerCase()
@@ -486,7 +497,14 @@ export function createAgent({
           log.error?.("[agent] account follow-up failed:", error.message);
           return "I could not finish getting my own key ready yet; I will retry.";
         });
-        r.doneText = `Your bill account is ready: ${created.account}\nSend fUSD or QOR to it from QoreX, then ask me to pay a bill. Send “status” to see your limits.${note ? `\n\n${note}` : ""}`;
+        r.doneText = [
+          "Your bill account is ready.",
+          "",
+          fundText(created.account),
+          "",
+          "Then ask me to pay a bill, e.g. “pay 0.5 QOR to electricity”. Send “status” to see your limits.",
+          ...(note ? ["", note] : []),
+        ].join("\n");
       } else {
         ({ hash } = await r.run(bytes));
       }
@@ -528,6 +546,8 @@ export function createAgent({
     }
     try {
       switch (cmd.kind) {
+        case "fund":
+          return { text: fundText(chain.accountAddress) };
         case "help":
           return { text: HELP };
         case "status":
