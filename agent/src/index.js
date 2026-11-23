@@ -1,6 +1,7 @@
 import { bech32ToHex, deriveUnifiedAccount, evmToQor } from "@qorechain/sdk";
 import { createBot } from "./bot.js";
 import { createChain } from "./chain.js";
+import { createGasDispenser } from "./gas.js";
 import { loadConfig } from "./config.js";
 import { createKeeper } from "./keeper.js";
 import { createLlmParser } from "./llm.js";
@@ -39,6 +40,12 @@ for (const [i, name] of DEMO_BILLERS.entries()) {
 }
 log.info(`[qorebills] main key ${main.qore.address} (${main.qore.evmAddress})${created ? ", new master key created" : ""}`);
 
+// The gas dispenser: a key linked to the main key under a native QoreChain spending rule.
+// Index 999999 is far above the user key indexes (1, 2, …) and below the demo billers (1000000+).
+const dispenserAccount = await createQoreAccount({ mnemonic, index: 999_999, rest: config.restUrl, rpc: config.rpcUrl, chainId: config.cosmosChainId });
+const gasDispenser = createGasDispenser({ owner: main.qore, dispenser: dispenserAccount, rest: config.restUrl, chainId: config.cosmosChainId, log });
+log.info(`[qorebills] gas dispenser ${gasDispenser.address} (${gasDispenser.evmAddress})`);
+
 const telegram = createTelegram({ token: config.telegramToken, log });
 const bot = createBot({
   main,
@@ -47,6 +54,7 @@ const bot = createBot({
   store: createStateStore(config.stateFile),
   factoryAddress: config.factoryAddress,
   maxUsers: config.maxUsers,
+  gasDispenser,
   log,
   // Telegram private chats use the user's id as the chat id.
   notifyUser: (userId, text) => telegram.send(userId, { text }),

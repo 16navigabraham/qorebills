@@ -43,7 +43,7 @@ QoreBills is built on one assumption: **the AI agent and the server it runs on a
 | **A request link leaking** | Links carry a random 128-bit id, but they are not authority: the action still needs the owner's signature over text naming the owner's own account. The page also warns when QoreX is open on a different account. |
 | **Spam on the hosted demo** | One account per Telegram user (at most 3 setups), a cap on total accounts (50 by default), at most 12 messages per user per minute, signature-request bodies capped at 64 KB. |
 | **Reentrancy through a biller** | `nonReentrant` on every state-changing entry point; state is updated before the transfer. |
-| **Draining gas through user keys** | User keys get 1 QOR at a time and only below 0.3 QOR; each window caps the value it lets out (20 QOR, fees included). |
+| **Draining gas through user keys** | User keys get 1 QOR at a time and only below 0.3 QOR; each window caps the value it lets out (20 QOR, fees included). Top-ups leave the treasury only through the gas-dispenser key, which QoreChain's native spending rule caps at 1 QOR per transfer and 10 QOR per UTC day, whatever the bot's code does. |
 
 ## Known limitations
 

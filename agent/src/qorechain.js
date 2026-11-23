@@ -11,9 +11,13 @@ import {
   closeEvmWindowMsg,
   deriveUnifiedAccount,
   fetchEvmWindow,
+  fetchAuthenticators,
   fetchPqcStatus,
+  fetchSpendingRules,
   generateMnemonic,
+  linkAuthenticatorMsgs,
   openEvmWindowMsg,
+  signAuthenticatorLinkEip191,
   signProofOfPossession,
   validateMnemonic,
 } from "@qorechain/sdk";
@@ -133,6 +137,48 @@ export async function createQoreAccount({ mnemonic, index = 0, rest, rpc, chainI
       );
       const result = await broadcast(signer, messages, 400_000);
       return { txHash: result.transactionHash };
+    },
+
+    /** Sign (hybrid) and broadcast messages from this account; throws unless code 0. */
+    submit: (messages, gas = 400_000) => broadcast(new EthNativeSigner(account, { rest }), messages, gas),
+
+    /** A delivered transaction's events, from the REST API. */
+    async txEvents(hash) {
+      for (let i = 0; i < 10; i++) {
+        try {
+          const { tx_response: r } = await getJson(`/cosmos/tx/v1beta1/txs/${hash}`);
+          return r.events || r.logs?.flatMap((l) => l.events) || [];
+        } catch {
+          await new Promise((res) => setTimeout(res, 1500));
+        }
+      }
+      throw new Error(`Transaction ${hash} not found`);
+    },
+
+    /** QoreChain's native smart-account records for this address (x/abstractaccount). */
+    spendingRules: () => fetchSpendingRules({ rest, address: account.cosmos, fetch: fetchImpl }),
+    authenticators: () => fetchAuthenticators({ rest, address: account.cosmos, fetch: fetchImpl }),
+
+    /**
+     * Link another secp256k1 key (by its EVM address) to this account with native spending
+     * rules, in ONE owner-signed transaction: MsgUpdateSpendingRules + MsgRegisterAuthenticator.
+     * The linked key proves possession by signing QoreChain's link text (EIP-191).
+     */
+    async linkAuthenticator({ privateKey, permissions, expiryUnix, label, rules }) {
+      const proof = signAuthenticatorLinkEip191({ chainId, account: account.cosmos, privateKey });
+      const messages = linkAuthenticatorMsgs({
+        owner: account.cosmos,
+        chainId,
+        scheme: proof.scheme,
+        pubkey: proof.pubkey,
+        possessionProof: proof.possessionProof,
+        permissions,
+        expiryUnix,
+        label,
+        spendingRules: rules,
+      });
+      const result = await broadcast(new EthNativeSigner(account, { rest }), messages, 700_000);
+      return { txHash: result.transactionHash, pubkey: proof.pubkey };
     },
 
     /** Send native QOR (uqor) to a qor1 address, e.g. to fund a user's agent key. */

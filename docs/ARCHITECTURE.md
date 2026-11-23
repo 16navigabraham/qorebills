@@ -38,9 +38,22 @@ The agent has one **master mnemonic**, created on first start in `AGENT_KEY_FILE
 | Index | Role | Registered PQC key | EVM window `allowed_targets` | Gas |
 |---|---|---|---|---|
 | 0 | **Main key**: sends `createAccount` for every user; funds user keys | yes (proof of possession) | the factory | Funded by the operator; the admin is told on Telegram below 3 QOR |
-| *n* ≥ 1 | **User n's agent key**: the `agent` of that user's account | yes (proof of possession) | that user's account only | 1 QOR from the main key when it drops below 0.3 QOR |
+| *n* ≥ 1 | **User n's agent key**: the `agent` of that user's account | yes (proof of possession) | that user's account only | 1 QOR from the treasury (through the gas dispenser) when it drops below 0.3 QOR |
+| 999,999 | **Gas dispenser**: an authenticator linked to the main key with the `send` permission and the native spending rule `agent-gas-topups` (1 QOR per transfer, 10 QOR per UTC day, `uqor` only); it relays its own `MsgExecuteCosmos` | yes (proof of possession) | none (Native lane only) | 0.5 QOR from the main key once, then refuels itself through the rule |
+| 1,000,000+ | **Demo billers**: addresses offered on the setup page, so test payments stay recoverable | no | none | none |
 
 A user's index is assigned the first time they message the bot and stored in the state file. Deriving a key costs nothing; it is only funded after the user's account exists.
+
+### The gas treasury under native spending rules
+
+The main key is the owner of a QoreChain smart-account record (`x/abstractaccount`). On start and every six hours the bot makes sure the dispenser key is linked to it (`linkAuthenticatorMsgs`: `MsgUpdateSpendingRules` + `MsgRegisterAuthenticator` with an EIP-191 possession proof, in one owner-signed hybrid transaction) and re-links it when fewer than 7 days of its 29-day link remain (the chain allows at most 30). A top-up is:
+
+1. read the dispenser's authenticator nonce (`/qorechain/abstractaccount/v1/auth_nonce/{owner}/{key}`);
+2. sign `cosmosAuthSignBytes(chainId, owner, key, to, amount, nonce)` with EIP-191;
+3. send `MsgExecuteCosmos` from the dispenser's own account (it pays the fee);
+4. read the transaction's events: from chain v3.2.8 a refused execution lands with code 0 and an `abstractaccount_execution_failed` event, which the bot treats as a refusal.
+
+When the daily rule is used up, new users are told to try again the next UTC day and the admin is told on Telegram.
 
 ## State
 

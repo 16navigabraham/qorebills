@@ -142,7 +142,7 @@ The AI Agents track asks for *"an autonomous agent with spending and access limi
 | **Value limits** | Per token: auto-pay limit, hard cap per payment, cap per UTC day (approved payments included) | `TokenLimits`, `_checkPayment` |
 | **Transaction limits** | Maximum number of payments per UTC day | `maxPaymentsPerDay`, `paymentsOnDay` |
 | **Duration limits** | The agent key stops working at `agentExpiry`; `pause` and `revoke` at any time | `agentExpiry`, `ActionKind.Pause`, `ActionKind.SetAgent` |
-| **Smart-account spending rules** | The money sits in a per-user smart account whose rules only the owner sets | `BillAgentAccount`, `BillAgentFactory` |
+| **Smart-account spending rules** | Two layers. The bill money sits in a per-user smart account whose rules only the owner sets. The agent's own gas treasury uses QoreChain's **native** smart-account rules (`x/abstractaccount`): top-ups go through a linked key bounded to 1 QOR per transfer and 10 QOR per day | `BillAgentAccount`, `BillAgentFactory`, [`gas.js`](agent/src/gas.js) |
 | **Scoped EVM window** | Each user's agent key keeps a QoreChain EVM authorisation window open whose `allowed_targets` is **only that user's account** (the main key's: only the factory), renewed automatically | [`keeper.js`](agent/src/keeper.js), [`qorechain.js`](agent/src/qorechain.js) |
 | **Authenticated messaging** | Approvals, settings changes and the account setup are QoreSign message-signing-v1 messages, checked on chain against the owner's registered ML-DSA-87 key, bound to the account, chain, deadline and nonce | [`OwnerSigned.sol`](contracts/contracts/OwnerSigned.sol), [docs/SIGNED_MESSAGES.md](docs/SIGNED_MESSAGES.md) |
 
@@ -154,6 +154,7 @@ QoreChain network features used:
 | **Solidity PQC key status** (PQC Key Status, `0x…0A02`) | Reading the owner's registered key and requiring ML-DSA-87 **and** proof of possession |
 | **PQC key registration with proof of possession** | Every agent key (and the deployer) registers its ML-DSA-87 key with a proof of possession before it acts |
 | **Hybrid ML-DSA-87 transactions** | Agent keys open and renew their EVM windows with hybrid (secp256k1 + ML-DSA-87) Cosmos transactions |
+| **Smart accounts and spending rules** (`x/abstractaccount`) | The gas dispenser: a linked authenticator key with only the `send` permission, bounded by a native spending rule, executing `MsgExecuteCosmos` from the treasury |
 | **EVM window, scoped** | A user's agent key can only call that user's account |
 | **Test tokens** | Bills are paid in **fUSD** (`0x97143B771D34ddb9130b807b135Ae675A5a963CA`, 6 decimals) or native QOR |
 | **QoreX wallet message signing** | `signArbitrary` (QoreSign message signing v1) for every owner signature |
@@ -195,6 +196,7 @@ flowchart LR
 ```
 
 - **Keys:** the agent creates one master mnemonic on the server on first start (file mode 600; it never leaves the machine). Key 0 is the **main key**: it submits account setups to the factory and funds user keys with gas. Key *n* is **user n's agent key**: the only key that user's account accepts as its agent, with its own registered ML-DSA-87 key and its own scoped EVM window.
+- **Gas treasury under native spending rules:** the main key links a separate **gas-dispenser key** to itself as a QoreChain authenticator (permission `send`, 29-day expiry, renewed automatically) with the native spending rule `agent-gas-topups`: at most 1 QOR per transfer and 10 QOR per UTC day, QOR only. Automatic top-ups of users' agent keys are `MsgExecuteCosmos` messages the dispenser signs and relays, so QoreChain checks the rule before anything leaves the treasury. Checked on the testnet: a 0.3 QOR top-up went through (`A052DFD0…CD5F6F2C`) and a 1.5 QOR one was refused by the chain ("per-tx limit 1000000uqor exceeded").
 - **Why a key per user:** isolation (a user's agent key can only call that user's account) and a QoreChain limit (a window lists at most 16 targets, so one shared key could not serve many users).
 
 More detail on state, nonces, gas and failure handling: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.

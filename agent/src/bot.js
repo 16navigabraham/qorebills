@@ -23,6 +23,7 @@ export function createBot({
   agentOptions,
   notifyUser,
   notifyAdmin = async () => {},
+  gasDispenser = null, // gas.js: top-ups bounded by QoreChain's native spending rules
   maxUsers = 50,
   maxSetupsPerUser = 3,
   log = console,
@@ -30,6 +31,7 @@ export function createBot({
   const requests = new Map();
   const sessions = new Map(); // telegramId -> { agent, keeper, qore }
   let lastAdminAsk = 0;
+  let dispenserTimer = null;
 
   const users = () => store.get().users || {};
   const userState = (id) => ({
@@ -52,12 +54,29 @@ export function createBot({
     },
   });
 
-  /** Fund a user's agent key from the main key. */
+  /**
+   * Fund a user's agent key from the main key's treasury. With a gas dispenser, the transfer
+   * goes through a linked key that QoreChain's native spending rule bounds (1 QOR per
+   * transfer, 10 QOR per day), so automatic top-ups can never drain the treasury quickly.
+   */
   async function topUp(qore) {
     const mainBalance = await main.qore.balanceUqor();
     if (mainBalance < USER_GAS_TOPUP_UQOR + 200_000n) {
       await mainKeeper.run();
       throw new Error("The agent is out of gas right now. The operator has been told.");
+    }
+    if (gasDispenser) {
+      try {
+        const { txHash } = await gasDispenser.fund(qore.address, USER_GAS_TOPUP_UQOR);
+        log.info?.(`[bot] funded ${qore.address} with 1 QOR through the gas dispenser: ${txHash}`);
+      } catch (error) {
+        if (/spending limit|daily limit|refused/i.test(error.message)) {
+          await notifyAdmin(`The gas dispenser hit its on-chain spending rule: ${error.message}`).catch(() => {});
+          throw new Error("Today's gas budget, set on chain, is used up. Try again tomorrow (UTC).");
+        }
+        throw error;
+      }
+      return;
     }
     const { txHash } = await main.qore.lock(() => main.qore.sendQor(qore.address, USER_GAS_TOPUP_UQOR));
     log.info?.(`[bot] funded ${qore.address} with 1 QOR: ${txHash}`);
@@ -124,11 +143,19 @@ export function createBot({
     mainKeeper,
     async start() {
       mainKeeper.start();
+      if (gasDispenser) {
+        // Link (and every few hours re-check) the dispenser under its native spending rule.
+        const ready = () => gasDispenser.ensureReady().catch((error) => log.error?.("[gas] not ready:", error.message));
+        mainKeeper.run().then(ready);
+        dispenserTimer = setInterval(ready, 6 * 3600_000);
+        dispenserTimer.unref?.();
+      }
       // Resume every user that already has an account.
       for (const id of Object.keys(users())) if (users()[id].account) await session(id);
     },
     stop() {
       mainKeeper.stop();
+      clearInterval(dispenserTimer);
       for (const pending of sessions.values()) pending.then((s) => s.keeper.stop(), () => {});
     },
     async handle(userId, text) {
