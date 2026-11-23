@@ -33,7 +33,7 @@ QoreBills was built **AI-native**: Adebanjo Abraham led the project as product o
 | Code and tests | Reviewed and directed | Wrote the Solidity contracts, the Node.js agent, the QoreX signing pages, the deploy scripts, Docker and CI/CD; 35 contract tests and 27 agent tests |
 | Testnet | Registered the QoreX account and post-quantum key, funded the deployer from the faucet | Verified `pqcVerify` with ML-DSA-87 signatures on the testnet, deployed the factory, diagnosed the public RPC's ~5M gas cap on `eth_call` and `eth_estimateGas` |
 | Operations | Created the Telegram bot, set the repository secrets, set up server access, merged the HTTPS change, ran the deploy | Wrote the deploy pipeline and server scripts |
-| Communication | The demo video and the submission | The README, `docs/` and this file |
+| Communication | Recorded the demo on a real phone, and the submission | Edited the recordings into the demo video (cuts, captions, layout), the README, `docs/` and this file |
 
 **Secrets never passed through the AI:** the bot token, the deploy key and the wallet recovery phrase were entered by the author directly into GitHub, the server or QoreX. The agent's own master key is created on the server and never leaves it.
 
@@ -49,4 +49,6 @@ QoreBills was built **AI-native**: Adebanjo Abraham led the project as product o
 |---|---|
 | Claude Code (Anthropic) | AI engineering pair: research, design drafts, code, tests, deployment |
 | Gemini API (optional, at runtime) | Turning free-form chat messages into a structured command |
+| Piper text-to-speech (open source, "Lessac" voice) | The demo video's narration is AI-generated from a script written for it; the screen recordings are real |
+| FFmpeg | Assembling the demo video from the author's screen recordings |
 | QoreChain docs (`docs.qorechain.io`, `llms.txt`) | Primary source for every chain-specific detail |
