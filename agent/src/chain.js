@@ -164,11 +164,30 @@ export function createChain({ rpcUrl, evmChainId, privateKey, tokens, factoryAdd
 
     accountOf: (owner) => publicClient.readContract({ ...factory, functionName: "accountOf", args: [owner] }),
 
-    async recentPayments({ blocks = 20_000n } = {}) {
+    /**
+     * The latest BillPaid events, newest last. The public RPC answers eth_getLogs for at most
+     * 10,000 blocks at a time, so search backwards in steps until `limit` payments are found
+     * or `maxBlocks` (about 3 days of testnet blocks) have been searched.
+     */
+    async recentPayments({ limit = 10, step = 9_999n, maxBlocks = 200_000n, parallel = 4 } = {}) {
       const latest = await publicClient.getBlockNumber();
-      const fromBlock = latest > blocks ? latest - blocks : 0n;
-      const logs = await publicClient.getContractEvents({ ...contract(), eventName: "BillPaid", fromBlock, toBlock: latest });
-      return logs.map((log) => ({ ...log.args, hash: log.transactionHash, blockNumber: log.blockNumber }));
+      const found = [];
+      let to = latest;
+      const floor = latest > maxBlocks ? latest - maxBlocks : 0n;
+      while (to > floor && found.length < limit) {
+        const ranges = [];
+        for (let i = 0; i < parallel && to > floor; i++) {
+          const from = to > floor + step ? to - step : floor;
+          ranges.push([from, to]);
+          to = from - 1n;
+        }
+        const batches = await Promise.all(
+          ranges.map(([fromBlock, toBlock]) => publicClient.getContractEvents({ ...contract(), eventName: "BillPaid", fromBlock, toBlock })),
+        );
+        for (const logs of batches) found.push(...logs.map((log) => ({ ...log.args, hash: log.transactionHash, blockNumber: log.blockNumber })));
+      }
+      found.sort((a, b) => (a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : 0));
+      return found.slice(-limit);
     },
   };
 }
