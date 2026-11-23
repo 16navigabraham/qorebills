@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t">
+  <title id="t">QoreBills</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f63f0"/>
+      <stop offset="1" stop-color="#23287a"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5bd49a"/>
+      <stop offset="1" stop-color="#1f9d66"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- the bill: a receipt with a torn (zigzag) bottom edge -->
+  <path d="M146 96 h196 a22 22 0 0 1 22 22 v290
+           l-27.3 -20 -27.3 20 -27.3 -20 -27.3 20 -27.3 -20 -27.3 20 -27.3 -20 -27.3 20
+           V118 a22 22 0 0 1 22 -22 z" fill="#ffffff"/>
+  <!-- text lines on the bill -->
+  <rect x="166" y="138" width="120" height="16" rx="8" fill="#c9cff5"/>
+  <rect x="166" y="172" width="160" height="16" rx="8" fill="#e3e6fb"/>
+  <!-- paid: a check mark -->
+  <path d="M184 262 l40 40 l84 -86" fill="none" stroke="#3a4fd9" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- protected: a shield with a lattice dot pattern (post-quantum) -->
+  <path d="M372 286 l58 20 v46 c0 40 -26 66 -58 80 c-32 -14 -58 -40 -58 -80 v-46 z" fill="url(#shield)" stroke="#23287a" stroke-width="10" stroke-linejoin="round"/>
+  <g fill="#ffffff">
+    <circle cx="352" cy="330" r="7"/><circle cx="372" cy="330" r="7"/><circle cx="392" cy="330" r="7"/>
+    <circle cx="352" cy="352" r="7"/><circle cx="372" cy="352" r="7"/><circle cx="392" cy="352" r="7"/>
+    <circle cx="362" cy="374" r="7"/><circle cx="382" cy="374" r="7"/>
+    <circle cx="372" cy="396" r="7"/>
+  </g>
+</svg>

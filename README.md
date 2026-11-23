@@ -1,4 +1,8 @@
-# QoreBills
+<p align="center">
+  <img src="assets/logo.svg" alt="QoreBills logo: a paid bill with a post-quantum shield" width="128" height="128">
+</p>
+
+<h1 align="center">QoreBills</h1>
 
 **An AI agent that pays your bills from a smart account on QoreChain, where the spending limits are enforced by the chain, not by the AI, and every big decision needs your post-quantum signature.**
 

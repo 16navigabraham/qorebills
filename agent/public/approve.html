@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
 <title>QoreBills signature</title>
 <style>
   :root { --bg: #f6f7fb; --card: #ffffff; --text: #141824; --muted: #5d6475; --line: #e3e6ee; --accent: #3a4fd9; --ok: #157a4a; --bad: #b42318; }
@@ -13,6 +14,8 @@
   body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
   main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-weight: 700; color: var(--muted); }
+  .brand img { width: 32px; height: 32px; border-radius: 8px; }
   .sub { color: var(--muted); margin: 0 0 20px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
   .summary { font-size: 1.15rem; font-weight: 600; }
@@ -25,6 +28,7 @@
 </head>
 <body>
 <main>
+  <div class="brand"><img src="/logo.svg" alt="">QoreBills</div>
   <h1 id="title">Sign in QoreX</h1>
   <p class="sub" id="intro">Your QoreBills agent needs your post-quantum signature.</p>
   <div class="card">

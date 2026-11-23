@@ -6,6 +6,7 @@ const PAGES = {
   setup: fs.readFileSync(new URL("../public/setup.html", import.meta.url), "utf8"),
 };
 const SCRIPT = fs.readFileSync(new URL("../public/qorex.js", import.meta.url), "utf8");
+const LOGO = fs.readFileSync(new URL("../public/logo.svg", import.meta.url), "utf8");
 const ID = /^[0-9a-f]{32}$/;
 const MAX_BODY = 64 * 1024; // an ML-DSA-87 signature is about 6 KB in base64
 
@@ -55,6 +56,10 @@ export function createWebServer({ agent, log = console }) {
       const url = new URL(req.url, "http://localhost");
       const parts = url.pathname.split("/").filter(Boolean);
       if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true });
+      if (req.method === "GET" && (url.pathname === "/logo.svg" || url.pathname === "/favicon.ico")) {
+        res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" });
+        return res.end(LOGO);
+      }
       if (req.method === "GET" && url.pathname === "/qorex.js") {
         res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" });
         return res.end(SCRIPT);

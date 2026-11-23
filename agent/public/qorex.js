@@ -58,8 +58,8 @@ window.QoreXSign = (() => {
       </ol>
       <button type="button" id="copyLink">Copy link</button>
       <input type="text" readonly id="linkText" aria-label="Page link" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--muted);font:13px ui-monospace,monospace">`;
-    const main = document.querySelector("main");
-    main.insertBefore(card, main.children[2] || null);
+    // Right under the page's intro, above everything the user would act on.
+    document.querySelector("main > p.sub").after(card);
     const text = card.querySelector("#linkText");
     text.value = location.href;
     card.querySelector("#copyLink").onclick = async () => {
