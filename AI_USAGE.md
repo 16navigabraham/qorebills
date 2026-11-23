@@ -30,7 +30,7 @@ QoreBills was built **AI-native**: Adebanjo Abraham led the project as product o
 |---|---|---|
 | Idea and product | Chose QoreBills and the track; decided it must be multi-user so anyone (and the judges) can try it; decided on a hosted agent bounded by on-chain limits rather than asking users to run their own | Proposed options and their trade-offs |
 | Architecture | Approved the design: smart account with on-chain limits, ML-DSA-87 approvals checked by the PQC precompiles, owner-signed setup and settings, one agent key per user with a scoped EVM window | Drafted the designs and the security model |
-| Code and tests | Reviewed and directed | Wrote the Solidity contracts, the Node.js agent, the QoreX signing pages, the deploy scripts, Docker and CI/CD; 35 contract tests and 27 agent tests |
+| Code and tests | Reviewed and directed | Wrote the Solidity contracts, the Node.js agent, the QoreX signing pages, the deploy scripts, Docker and CI/CD; 35 contract tests and 34 agent tests |
 | Testnet | Registered the QoreX account and post-quantum key, funded the deployer from the faucet | Verified `pqcVerify` with ML-DSA-87 signatures on the testnet, deployed the factory, diagnosed the public RPC's ~5M gas cap on `eth_call` and `eth_estimateGas` |
 | Operations | Created the Telegram bot, set the repository secrets, set up server access, merged the HTTPS change, ran the deploy | Wrote the deploy pipeline and server scripts |
 | Communication | Recorded the demo on a real phone, and the submission | Edited the recordings into the demo video (cuts, captions, layout), the README, `docs/` and this file |

@@ -12,10 +12,11 @@
 
 Built for [Build Before Q-Day](https://build.qorechain.io), **Post-Quantum AI Agents** track. `#BuildBeforeQDay`
 
-<p align="center">
-  <a href="https://youtu.be/LDySbN4KO_o"><img src="assets/demo-preview.gif" alt="QoreBills: a payment above the auto-pay limit is approved with an ML-DSA-87 signature in QoreX, verified on chain, then paid. Click for the full video." width="800"></a><br>
-  <b><a href="https://youtu.be/LDySbN4KO_o">▶ Watch the 2½-minute demo</a></b> (narrated): setup in QoreX, auto-paid bills, and a big payment approved with an ML-DSA-87 signature verified on chain
-</p>
+### ▶ Demo (2:32, narrated)
+
+https://github.com/user-attachments/assets/e5f8ce77-0334-410f-8373-0bbe47be68b9
+
+Setup in QoreX, bills paid on their own, and a big payment approved with an ML-DSA-87 signature verified on chain. Also on [YouTube](https://youtu.be/LDySbN4KO_o).
 
 | | |
 |---|---|
@@ -23,7 +24,7 @@ Built for [Build Before Q-Day](https://build.qorechain.io), **Post-Quantum AI Ag
 | Try it | [@QoreBills_bot](https://t.me/QoreBills_bot) on Telegram + the QoreX wallet on testnet ([how](#try-it-in-5-minutes)) |
 | Network | QoreChain testnet `qorechain-diana`, EVM chain id `9800` |
 | Factory | [`0xF0385815a19009FBC01ba24773469c5e4e4e9b2D`](#testnet-deployment) |
-| Tests | 35 contract tests and 27 agent tests (including two-user end-to-end runs), on every push in [CI](.github/workflows/ci.yml) |
+| Tests | 35 contract tests and 34 agent tests (including two-user end-to-end runs), on every push in [CI](.github/workflows/ci.yml) |
 | Docs | [Architecture](docs/ARCHITECTURE.md) · [Security model](docs/SECURITY.md) · [Signed messages](docs/SIGNED_MESSAGES.md) · [AI usage](AI_USAGE.md) |
 | Licence | MIT |
 
