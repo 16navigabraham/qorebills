@@ -7,3 +7,5 @@ out/
 broadcast/
 coverage/
 *.log
+artifacts/
+typechain-types/

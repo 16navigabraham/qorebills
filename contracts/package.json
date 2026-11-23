@@ -1,0 +1,19 @@
+{
+  "name": "qorebills-contracts",
+  "version": "1.0.0",
+  "description": "BillAgentAccount: an AI bill-paying smart account with on-chain limits for QoreChain",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "hardhat": "^2.29.2",
+    "solc": "0.8.24"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.0.2"
+  },
+  "private": true
+}

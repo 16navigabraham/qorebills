@@ -29,7 +29,24 @@ You chat with the agent ("pay my electricity, 20 fUSD"), it decides what to do, 
 
 ## Status
 
-Day 1: planning. Contracts and agent code follow.
+Day 2: the `BillAgentAccount` smart account is written and tested (24 tests, `contracts/`).
+
+| Limit | How the contract enforces it |
+| --- | --- |
+| Target | Only billers the owner allowlisted can be paid |
+| Value | Per token: an auto-pay limit, a hard cap per payment and a cap per UTC day |
+| Transactions | A maximum number of payments per UTC day |
+| Duration | The agent key stops working at its expiry; the owner can pause or revoke it at once |
+| Approval | Above the auto-pay limit, the agent needs the owner's ML-DSA-87 signature, checked on chain with QoreChain's PQC Verify (`0x…0A01`) against the key registered for the owner (PQC Key Status, `0x…0A02`, proof of possession required) |
+
+Each bill reference is paid once, each approval has a nonce and a deadline, and the owner can withdraw at any time.
+The owner signs approvals with QoreChain message signing v1 (`qorechain-msg-v1|qorechain-diana|` + the approval text), so the wallet shows the biller, amount and expiry in plain text.
+
+```bash
+cd contracts && npm install && npm test
+```
+
+Next: the agent service and Telegram bot.
 
 ## Testnet addresses
 
