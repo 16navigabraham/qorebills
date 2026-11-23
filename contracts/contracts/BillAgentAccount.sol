@@ -51,6 +51,8 @@ contract BillAgentAccount is ReentrancyGuard {
 
     mapping(address token => TokenLimits) public limits;
     mapping(address biller => Biller) internal _billers;
+    address[] internal _billerList; // every biller ever set, allowed or not
+    mapping(address biller => bool) internal _listed;
     mapping(address token => mapping(uint256 day => uint256)) public spentOnDay;
     mapping(uint256 day => uint256) public paymentsOnDay;
     mapping(bytes32 ref => bool) public refPaid;
@@ -106,6 +108,10 @@ contract BillAgentAccount is ReentrancyGuard {
 
     function setBiller(address biller, bool allowed, string calldata name) external onlyOwner {
         _billers[biller] = Biller(allowed, name);
+        if (!_listed[biller]) {
+            _listed[biller] = true;
+            _billerList.push(biller);
+        }
         emit BillerSet(biller, allowed, name);
     }
 
@@ -220,6 +226,11 @@ contract BillAgentAccount is ReentrancyGuard {
     function billerInfo(address biller_) external view returns (bool allowed, string memory name) {
         Biller storage b = _billers[biller_];
         return (b.allowed, b.name);
+    }
+
+    /// @notice Every biller the owner has set, including removed ones (check billerInfo).
+    function billerList() external view returns (address[] memory) {
+        return _billerList;
     }
 
     function today() public view returns (uint256) {

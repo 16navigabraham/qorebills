@@ -296,6 +296,14 @@ describe("BillAgentAccount", function () {
       }
     });
 
+    it("lists every biller once, with its current status", async function () {
+      const { account, power, water } = await loadFixture(deploy);
+      await account.setBiller(power.address, false, "IBEDC electricity");
+      expect(await account.billerList()).to.deep.equal([power.address, water.address]);
+      expect(await account.billerInfo(power.address)).to.deep.equal([false, "IBEDC electricity"]);
+      expect(await account.billerInfo(water.address)).to.deep.equal([true, "Water board"]);
+    });
+
     it("refuses limits that contradict each other", async function () {
       const { account, tokenAddress } = await loadFixture(deploy);
       await expect(account.setLimits(tokenAddress, 50, 40, 100, true)).to.be.revertedWithCustomError(account, "InvalidLimits");
