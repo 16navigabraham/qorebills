@@ -4,6 +4,10 @@
 
 <h1 align="center">QoreBills</h1>
 
+<p align="center">
+  <a href="https://build.qorechain.io/p/qorebills"><img src="https://build.qorechain.io/badge/qorebills.svg" alt="Built on QoreChain"></a>
+</p>
+
 **An AI agent that pays your bills from a smart account on QoreChain, where the spending limits are enforced by the chain, not by the AI, and every big decision needs your post-quantum signature.**
 
 Built for [Build Before Q-Day](https://build.qorechain.io), **Post-Quantum AI Agents** track. `#BuildBeforeQDay`
